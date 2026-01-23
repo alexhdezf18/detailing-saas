@@ -56,7 +56,7 @@ const plans: PricingPlan[] = [
 export function Pricing() {
   return (
     <section className="w-full py-24 md:py-32 bg-zinc-950">
-      <div className="container px-4 md:px-6">
+      <div className="container mx-auto px-4 md:px-6">
         
         <div className="flex flex-col items-center justify-center gap-4 text-center">
           <h2 className="text-3xl font-bold tracking-tighter text-white sm:text-4xl">

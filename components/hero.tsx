@@ -6,7 +6,7 @@ export function Hero() {
   return (
     <section className="relative w-full overflow-hidden bg-black pt-16 md:pt-20 lg:pt-28">
       {/* Contenedor principal con Grid */}
-      <div className="container px-4 md:px-6">
+      <div className="container mx-auto px-4 md:px-6">
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-8 items-center">
           
           {/* COLUMNA IZQUIERDA: Texto y CTAs */}

@@ -16,10 +16,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="dark"> {/* <--- 2. Forzamos modo oscuro */}
-      <body className={`${inter.className} bg-black text-white antialiased`}> {/* 3. Fondo negro base */}
-        <Navbar /> {/* <--- 4. Aquí colocamos el Navbar */}
-        {children} {/* Aquí se renderizará page.tsx */}
+    <html lang="es" className="dark">
+      <body className={`${inter.className} bg-black text-white antialiased`}>
+        <Navbar />
+        {children}
       </body>
     </html>
   );
