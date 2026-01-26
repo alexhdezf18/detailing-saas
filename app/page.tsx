@@ -10,6 +10,7 @@ export default function Home() {
       <Features />
       <Pricing />
       <Testimonials />
+      /*Commit pequeño por si acaso*/
     </main>
   );
 }
