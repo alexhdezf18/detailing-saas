@@ -3,6 +3,7 @@ import { Features } from "@/components/features";
 import { Pricing } from "@/components/pricing";
 import { Testimonials } from "@/components/testimonials";
 import { FAQ } from "@/components/faq";
+import { Footer } from "@/components/footer";
 
 export default function Home() {
   return (
@@ -12,6 +13,7 @@ export default function Home() {
       <Pricing />
       <Testimonials />
       <FAQ />
+      <Footer />
     </main>
   );
 }
