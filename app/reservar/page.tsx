@@ -5,8 +5,6 @@ import { Footer } from "@/components/footer"; // Reusamos el Footer
 export default function BookPage() {
   return (
     <main className="min-h-screen bg-black flex flex-col">
-      <Navbar />
-
       <div className="flex-1 flex items-center justify-center p-4 md:p-8">
         <div className="w-full max-w-4xl grid md:grid-cols-2 gap-12 items-center">
           {/* Lado Izquierdo: Texto motivador */}

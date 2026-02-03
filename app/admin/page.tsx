@@ -142,8 +142,6 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-black">
-      <Navbar />
-
       <div className="container mx-auto py-10 px-4">
         <div className="flex justify-between items-center mb-8">
           <div>
