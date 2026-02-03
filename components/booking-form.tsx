@@ -6,7 +6,7 @@ import { z } from "zod";
 import { CalendarIcon, Loader2, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-
+import { createBooking } from "@/app/actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -140,31 +140,19 @@ export function BookingForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from("bookings").insert([
-        {
-          name: values.name,
-          phone: values.phone,
-          email: values.email,
-          service_type: values.service_type,
-          booking_date: values.booking_date.toISOString(),
-          booking_time: values.booking_time,
-          address_street: values.address_street,
-          address_number: values.address_number,
-          address_zip: values.address_zip,
-          address_colonia: values.address_colonia,
-          address_city: "Chihuahua, CHIH",
-          status: "pending",
-        },
-      ]);
+      const result = await createBooking({
+        ...values,
+        booking_date: values.booking_date.toISOString(),
+      });
 
-      if (error) throw error;
+      if (!result.success) throw new Error(result.message);
 
       const fechaFormato = format(values.booking_date, "EEEE d 'de' MMMM", {
         locale: es,
       });
       const whatsappUrl = `https://wa.me/${BUSINESS_PHONE}?text=${encodeURIComponent(`Hola, quiero confirmar mi reserva para el ${fechaFormato} a las ${values.booking_time}.`)}`;
-      window.location.href = whatsappUrl;
 
+      window.location.href = whatsappUrl;
       form.reset();
     } catch (error: any) {
       alert(`Error: ${error.message}`);
