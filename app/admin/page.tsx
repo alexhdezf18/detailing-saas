@@ -33,6 +33,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import Link from "next/link";
 
 interface Booking {
   id: number;
@@ -160,6 +161,14 @@ export default function AdminPage() {
           </div>
 
           <div className="flex gap-4 items-center">
+            <Link href="/admin/calendario">
+              <Button
+                variant="outline"
+                className="border-zinc-700 text-zinc-300 hover:text-white"
+              >
+                📅 Gestionar Horarios
+              </Button>
+            </Link>
             <Badge
               variant="outline"
               className="text-zinc-400 border-zinc-700 h-9 px-4"

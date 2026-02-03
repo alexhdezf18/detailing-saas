@@ -34,7 +34,16 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 
-// --- DATOS DE PRUEBA PARA CHIHUAHUA (Simulación de API) ---
+// --- CONFIGURACIÓN ---
+// Tus horarios estándar de trabajo
+const DEFAULT_TIME_SLOTS = [
+  "09:00 AM",
+  "11:00 AM",
+  "01:00 PM",
+  "03:00 PM",
+  "05:00 PM",
+];
+
 const CODIGOS_POSTALES_DEMO: Record<string, string> = {
   "31000": "Colonia Centro",
   "31109": "San Felipe",
@@ -45,7 +54,7 @@ const CODIGOS_POSTALES_DEMO: Record<string, string> = {
   "31064": "Robinson",
 };
 
-const TIME_SLOTS = ["09:00 AM", "11:00 AM", "01:00 PM", "03:00 PM", "05:00 PM"];
+const BUSINESS_PHONE = "526141234567"; // <--- TU NÚMERO
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Requerido" }),
@@ -54,16 +63,17 @@ const formSchema = z.object({
   service_type: z.string().min(1, { message: "Selecciona servicio" }),
   booking_date: z.date({ message: "Selecciona fecha" }),
   booking_time: z.string().min(1, { message: "Selecciona hora" }),
-
-  // NUEVOS CAMPOS DE DIRECCIÓN
-  address_zip: z.string().min(5, { message: "CP de 5 dígitos" }).max(5),
-  address_colonia: z.string().min(1, { message: "Colonia requerida" }),
-  address_street: z.string().min(1, { message: "Calle requerida" }),
-  address_number: z.string().min(1, { message: "Número requerido" }),
+  address_zip: z.string().min(5).max(5),
+  address_colonia: z.string().min(1),
+  address_street: z.string().min(1),
+  address_number: z.string().min(1),
 });
 
 export function BookingForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [availableSlots, setAvailableSlots] =
+    useState<string[]>(DEFAULT_TIME_SLOTS);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -78,27 +88,58 @@ export function BookingForm() {
     },
   });
 
-  // MAGIA: Escuchar cambios en el Código Postal
+  // 1. AUTOCOMPLETADO DE CP
   const zipCode = form.watch("address_zip");
-
   useEffect(() => {
     if (zipCode && zipCode.length === 5) {
-      // Intentamos buscar en nuestra "base de datos" local
-      const coloniaEncontrada = CODIGOS_POSTALES_DEMO[zipCode];
-      if (coloniaEncontrada) {
-        form.setValue("address_colonia", coloniaEncontrada);
-        // Aquí podrías agregar lógica para llenar Ciudad/Estado automáticamente también
-      }
+      const colonia = CODIGOS_POSTALES_DEMO[zipCode];
+      if (colonia) form.setValue("address_colonia", colonia);
     }
   }, [zipCode, form]);
 
-  const BUSINESS_PHONE = "526141234567"; // <--- NUMERO DE EJEMPLO
+  // 2. LÓGICA DE DISPONIBILIDAD (La Magia Nueva)
+  const selectedDate = form.watch("booking_date");
+
+  useEffect(() => {
+    async function checkAvailability() {
+      if (!selectedDate) return;
+
+      setIsLoadingSlots(true);
+      // Formatear fecha para buscar en DB (YYYY-MM-DDT...)
+      // Nota: Supabase guarda en ISO, compararemos por día
+
+      // Truco: Convertimos la fecha seleccionada al inicio y fin del día para buscar
+      const startOfDay = new Date(selectedDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(selectedDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Buscamos todas las citas ACTIVAS de ese día (excluyendo canceladas)
+      const { data: takenBookings } = await supabase
+        .from("bookings")
+        .select("booking_time")
+        .gte("booking_date", startOfDay.toISOString())
+        .lte("booking_date", endOfDay.toISOString())
+        .neq("status", "cancelled"); // Si está cancelada, la hora queda libre de nuevo
+
+      if (takenBookings) {
+        const takenTimes = takenBookings.map((b) => b.booking_time);
+
+        // Filtramos: Las horas libres son las del Default MENOS las ocupadas
+        const freeSlots = DEFAULT_TIME_SLOTS.filter(
+          (slot) => !takenTimes.includes(slot),
+        );
+        setAvailableSlots(freeSlots);
+      }
+      setIsLoadingSlots(false);
+    }
+
+    checkAvailability();
+  }, [selectedDate]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
-
     try {
-      // 1. Guardar en Supabase (Tu respaldo administrativo)
       const { error } = await supabase.from("bookings").insert([
         {
           name: values.name,
@@ -112,35 +153,21 @@ export function BookingForm() {
           address_zip: values.address_zip,
           address_colonia: values.address_colonia,
           address_city: "Chihuahua, CHIH",
+          status: "pending",
         },
       ]);
 
       if (error) throw error;
 
-      // 2. Preparar el mensaje de WhatsApp
       const fechaFormato = format(values.booking_date, "EEEE d 'de' MMMM", {
         locale: es,
       });
-
-      const whatsappMessage = `Hola *Detailing SaaS*! 🚗✨
-Quiero confirmar mi reserva que acabo de hacer en la web:
-
-👤 *Cliente:* ${values.name}
-🛠 *Servicio:* ${values.service_type}
-📅 *Fecha:* ${fechaFormato}
-⏰ *Hora:* ${values.booking_time}
-📍 *Zona:* ${values.address_colonia}
-
-¿Me confirman la disponibilidad?`;
-
-      const whatsappUrl = `https://wa.me/${BUSINESS_PHONE}?text=${encodeURIComponent(whatsappMessage)}`;
-
+      const whatsappUrl = `https://wa.me/${BUSINESS_PHONE}?text=${encodeURIComponent(`Hola, quiero confirmar mi reserva para el ${fechaFormato} a las ${values.booking_time}.`)}`;
       window.location.href = whatsappUrl;
 
       form.reset();
     } catch (error: any) {
-      console.error("Error detallado:", error);
-      alert(`Error al guardar: ${error.message}`);
+      alert(`Error: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -148,16 +175,155 @@ Quiero confirmar mi reserva que acabo de hacer en la web:
 
   return (
     <div className="w-full max-w-2xl mx-auto p-6 bg-zinc-900/50 backdrop-blur-lg rounded-xl border border-zinc-800 shadow-2xl">
-      <div className="mb-8 text-center border-b border-zinc-800 pb-4">
-        <h3 className="text-2xl font-bold text-white">Agenda tu Servicio</h3>
-        <p className="text-zinc-400 text-sm">
-          Déjanos tus datos y nosotros vamos a ti.
-        </p>
+      <div className="mb-6 text-center">
+        <h3 className="text-2xl font-bold text-white">Reserva Inteligente</h3>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* SECCIÓN 1: CONTACTO */}
+          {/* ... (Secciones de Contacto y Dirección se mantienen igual) ... */}
+          {/* SOLO PONDRÉ AQUÍ LA SECCIÓN DE CITA QUE CAMBIÓ VISUALMENTE */}
+
+          <div className="space-y-4 pt-2 border-t border-zinc-800">
+            <h4 className="text-sm font-semibold text-orange-500 uppercase">
+              Detalles de la Cita
+            </h4>
+
+            {/* SERVICIO (Igual que antes) */}
+            <FormField
+              control={form.control}
+              name="service_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-zinc-300">Paquete</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                        <SelectValue placeholder="Selecciona..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                      <SelectItem value="Lavado Express">
+                        Lavado Express ($350)
+                      </SelectItem>
+                      <SelectItem value="Detallado Premium">
+                        Detallado Premium ($950)
+                      </SelectItem>
+                      <SelectItem value="Cerámico Total">
+                        Cerámico Total ($2,500)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* CALENDARIO */}
+              <FormField
+                control={form.control}
+                name="booking_date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-zinc-300">Fecha</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal bg-zinc-950 border-zinc-800 hover:bg-zinc-900 text-white",
+                              !field.value && "text-muted-foreground",
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "d MMM", { locale: es })
+                            ) : (
+                              <span>Elegir día</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-auto p-0 bg-zinc-900 border-zinc-800"
+                        align="start"
+                      >
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={(date) => {
+                            field.onChange(date);
+                            form.setValue("booking_time", ""); // Resetear hora al cambiar día
+                          }}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                          className="text-white"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* HORA INTELIGENTE */}
+              <FormField
+                control={form.control}
+                name="booking_time"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-zinc-300">
+                      Hora{" "}
+                      {isLoadingSlots && (
+                        <span className="text-orange-500 text-xs ml-2">
+                          (Buscando...)
+                        </span>
+                      )}
+                    </FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={!selectedDate || isLoadingSlots}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                          <SelectValue
+                            placeholder={
+                              selectedDate
+                                ? "Ver horarios"
+                                : "Primero elige fecha"
+                            }
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        {availableSlots.length > 0 ? (
+                          availableSlots.map((time) => (
+                            <SelectItem key={time} value={time}>
+                              {time}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-sm text-zinc-500 text-center">
+                            ¡Día lleno!
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+
+          {/* RESTO DEL FORMULARIO OCULTO PARA BREVEDAD (NOMBRE, DIRECCIÓN) - DEBES MANTENERLO */}
+          {/* Asegúrate de pegar las secciones de "Tus Datos" y "Ubicación" que ya tenías aquí antes del botón */}
           <div className="space-y-4">
             <h4 className="text-sm font-semibold text-orange-500 uppercase tracking-wider">
               1. Tus Datos
@@ -211,13 +377,10 @@ Quiero confirmar mi reserva que acabo de hacer en la web:
             />
           </div>
 
-          {/* SECCIÓN 2: UBICACIÓN (ESTILO E-COMMERCE) */}
           <div className="space-y-4 pt-2">
             <h4 className="text-sm font-semibold text-orange-500 uppercase tracking-wider flex items-center gap-2">
               <MapPin className="h-4 w-4" /> 2. Ubicación del Vehículo
             </h4>
-
-            {/* FILA 1: CP y Colonia (Auto-rellenable) */}
             <div className="grid grid-cols-3 gap-4">
               <FormField
                 control={form.control}
@@ -237,7 +400,6 @@ Quiero confirmar mi reserva que acabo de hacer en la web:
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
                 name="address_colonia"
@@ -256,8 +418,6 @@ Quiero confirmar mi reserva que acabo de hacer en la web:
                 )}
               />
             </div>
-
-            {/* FILA 2: Calle y Número */}
             <div className="grid grid-cols-4 gap-4">
               <FormField
                 control={form.control}
@@ -276,7 +436,6 @@ Quiero confirmar mi reserva que acabo de hacer en la web:
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
                 name="address_number"
@@ -297,132 +456,12 @@ Quiero confirmar mi reserva que acabo de hacer en la web:
             </div>
           </div>
 
-          {/* SECCIÓN 3: CITA */}
-          <div className="space-y-4 pt-2">
-            <h4 className="text-sm font-semibold text-orange-500 uppercase tracking-wider">
-              3. Detalles del Servicio
-            </h4>
-            <FormField
-              control={form.control}
-              name="service_type"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-zinc-300">Paquete</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="bg-zinc-950 border-zinc-800">
-                        <SelectValue placeholder="Selecciona..." />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                      <SelectItem value="Lavado Express">
-                        Lavado Express ($350)
-                      </SelectItem>
-                      <SelectItem value="Detallado Premium">
-                        Detallado Premium ($950)
-                      </SelectItem>
-                      <SelectItem value="Cerámico Total">
-                        Cerámico Total ($2,500)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              {/* CALENDARIO */}
-              <FormField
-                control={form.control}
-                name="booking_date"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel className="text-zinc-300">Fecha</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal bg-zinc-950 border-zinc-800 hover:bg-zinc-900 text-white",
-                              !field.value && "text-muted-foreground",
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "d MMM", { locale: es })
-                            ) : (
-                              <span>Elegir día</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        className="w-auto p-0 bg-zinc-900 border-zinc-800"
-                        align="start"
-                      >
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date < new Date()}
-                          initialFocus
-                          className="text-white"
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* HORA */}
-              <FormField
-                control={form.control}
-                name="booking_time"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-zinc-300">Hora</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="bg-zinc-950 border-zinc-800">
-                          <SelectValue placeholder="Hora" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                        {TIME_SLOTS.map((time) => (
-                          <SelectItem key={time} value={time}>
-                            {time}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </div>
-
           <Button
             type="submit"
             className="w-full bg-orange-600 hover:bg-orange-700 font-bold py-6 text-lg"
             disabled={isSubmitting}
           >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Procesando...
-              </>
-            ) : (
-              "Confirmar Dirección y Cita"
-            )}
+            {isSubmitting ? "Procesando..." : "Confirmar en WhatsApp"}
           </Button>
         </form>
       </Form>
