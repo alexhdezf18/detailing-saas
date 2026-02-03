@@ -23,6 +23,7 @@ import {
   XCircle,
   Clock,
   CheckSquare,
+  MapPin,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -43,6 +44,10 @@ interface Booking {
   booking_date: string;
   booking_time: string;
   status: string;
+  address_street?: string;
+  address_number?: string;
+  address_colonia?: string;
+  address_zip?: string;
 }
 
 export default function AdminPage() {
@@ -206,12 +211,21 @@ export default function AdminPage() {
                     className="border-zinc-800 hover:bg-zinc-800/50"
                   >
                     <TableCell className="font-medium text-white">
-                      {booking.name}
+                      <div>{booking.name}</div>
                       <div className="text-xs text-zinc-500">
-                        {booking.email}
-                      </div>
-                      <div className="text-xs text-zinc-500 md:hidden">
                         {booking.phone}
+                      </div>
+
+                      {/* NUEVO: Mostrar Dirección */}
+                      <div className="flex items-start gap-1 mt-2 text-xs text-zinc-400 max-w-[200px] leading-tight">
+                        <MapPin className="h-3 w-3 mt-0.5 text-orange-500 flex-shrink-0" />
+                        <span>
+                          {booking.address_street} {booking.address_number},{" "}
+                          {booking.address_colonia}
+                          <span className="block text-zinc-600">
+                            CP {booking.address_zip}
+                          </span>
+                        </span>
                       </div>
                     </TableCell>
 

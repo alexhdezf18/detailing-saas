@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { CalendarIcon, Loader2, Clock } from "lucide-react"; // <--- Importamos Clock
+import { CalendarIcon, Loader2, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -32,23 +32,34 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-// 1. Definimos los horarios disponibles (Slots)
+// --- DATOS DE PRUEBA PARA CHIHUAHUA (Simulación de API) ---
+const CODIGOS_POSTALES_DEMO: Record<string, string> = {
+  "31000": "Colonia Centro",
+  "31109": "San Felipe",
+  "31125": "Panamericana",
+  "31203": "Campanario",
+  "31215": "Paseos de Chihuahua",
+  "31300": "Las Granjas",
+  "31064": "Robinson",
+};
+
 const TIME_SLOTS = ["09:00 AM", "11:00 AM", "01:00 PM", "03:00 PM", "05:00 PM"];
 
-// 2. Actualizamos el esquema de validación
 const formSchema = z.object({
-  name: z.string().min(2, { message: "El nombre es muy corto." }),
-  phone: z
-    .string()
-    .min(10, { message: "Ingresa un número válido de 10 dígitos." }),
-  email: z.string().email({ message: "Correo inválido." }),
-  service_type: z
-    .string()
-    .min(1, { message: "Por favor selecciona un servicio." }),
-  booking_date: z.date({ message: "¡Necesitamos saber cuándo ir!" }),
-  booking_time: z.string().min(1, { message: "Selecciona una hora." }), // <--- Nuevo campo
+  name: z.string().min(2, { message: "Requerido" }),
+  phone: z.string().min(10, { message: "10 dígitos requeridos" }),
+  email: z.string().email({ message: "Email inválido" }),
+  service_type: z.string().min(1, { message: "Selecciona servicio" }),
+  booking_date: z.date({ message: "Selecciona fecha" }),
+  booking_time: z.string().min(1, { message: "Selecciona hora" }),
+
+  // NUEVOS CAMPOS DE DIRECCIÓN
+  address_zip: z.string().min(5, { message: "CP de 5 dígitos" }).max(5),
+  address_colonia: z.string().min(1, { message: "Colonia requerida" }),
+  address_street: z.string().min(1, { message: "Calle requerida" }),
+  address_number: z.string().min(1, { message: "Número requerido" }),
 });
 
 export function BookingForm() {
@@ -60,13 +71,29 @@ export function BookingForm() {
       name: "",
       phone: "",
       email: "",
-      // Sin defaults para obligar a elegir
+      address_zip: "",
+      address_colonia: "",
+      address_street: "",
+      address_number: "",
     },
   });
 
+  // MAGIA: Escuchar cambios en el Código Postal
+  const zipCode = form.watch("address_zip");
+
+  useEffect(() => {
+    if (zipCode && zipCode.length === 5) {
+      // Intentamos buscar en nuestra "base de datos" local
+      const coloniaEncontrada = CODIGOS_POSTALES_DEMO[zipCode];
+      if (coloniaEncontrada) {
+        form.setValue("address_colonia", coloniaEncontrada);
+        // Aquí podrías agregar lógica para llenar Ciudad/Estado automáticamente también
+      }
+    }
+  }, [zipCode, form]);
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
-
     try {
       const { error } = await supabase.from("bookings").insert([
         {
@@ -75,69 +102,77 @@ export function BookingForm() {
           email: values.email,
           service_type: values.service_type,
           booking_date: values.booking_date.toISOString(),
-          booking_time: values.booking_time, // <--- Enviamos la hora
+          booking_time: values.booking_time,
+          // Guardamos la dirección completa
+          address_street: values.address_street,
+          address_number: values.address_number,
+          address_zip: values.address_zip,
+          address_colonia: values.address_colonia,
+          address_city: "Chihuahua, CHIH",
         },
       ]);
 
       if (error) throw error;
-
-      alert("¡Cita agendada! Revisa tu correo.");
+      alert("¡Reserva completada! Vamos en camino.");
       form.reset();
     } catch (error: any) {
-      console.error("Error detallado:", error);
-      alert(`Error: ${error.message || "Hubo un error al guardar."}`);
+      console.error(error);
+      alert("Error al guardar.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <div className="w-full max-w-md mx-auto p-6 bg-zinc-900/50 backdrop-blur-lg rounded-xl border border-zinc-800 shadow-2xl">
-      <div className="mb-6 text-center">
-        <h3 className="text-2xl font-bold text-white">Reserva tu Detallado</h3>
-        <p className="text-zinc-400 text-sm mt-2">
-          Elige el servicio, la fecha y la hora.
+    <div className="w-full max-w-2xl mx-auto p-6 bg-zinc-900/50 backdrop-blur-lg rounded-xl border border-zinc-800 shadow-2xl">
+      <div className="mb-8 text-center border-b border-zinc-800 pb-4">
+        <h3 className="text-2xl font-bold text-white">Agenda tu Servicio</h3>
+        <p className="text-zinc-400 text-sm">
+          Déjanos tus datos y nosotros vamos a ti.
         </p>
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-zinc-300">Nombre</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Tu nombre"
-                    {...field}
-                    className="bg-zinc-950 border-zinc-800 text-white"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-zinc-300">WhatsApp</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="614..."
-                      {...field}
-                      className="bg-zinc-950 border-zinc-800 text-white"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {/* SECCIÓN 1: CONTACTO */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-semibold text-orange-500 uppercase tracking-wider">
+              1. Tus Datos
+            </h4>
+            <div className="grid md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-zinc-300">Nombre</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-zinc-300">WhatsApp</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={form.control}
               name="email"
@@ -145,11 +180,7 @@ export function BookingForm() {
                 <FormItem>
                   <FormLabel className="text-zinc-300">Email</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="@gmail.com"
-                      {...field}
-                      className="bg-zinc-950 border-zinc-800 text-white"
-                    />
+                    <Input {...field} className="bg-zinc-950 border-zinc-800" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -157,129 +188,217 @@ export function BookingForm() {
             />
           </div>
 
-          <FormField
-            control={form.control}
-            name="service_type"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-zinc-300">Paquete</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger className="bg-zinc-950 border-zinc-800 text-zinc-300">
-                      <SelectValue placeholder="Selecciona un paquete" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-300">
-                    <SelectItem value="Lavado Express">
-                      Lavado Express ($350)
-                    </SelectItem>
-                    <SelectItem value="Detallado Premium">
-                      Detallado Premium ($950)
-                    </SelectItem>
-                    <SelectItem value="Cerámico Total">
-                      Cerámico Total ($2,500)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* SECCIÓN 2: UBICACIÓN (ESTILO E-COMMERCE) */}
+          <div className="space-y-4 pt-2">
+            <h4 className="text-sm font-semibold text-orange-500 uppercase tracking-wider flex items-center gap-2">
+              <MapPin className="h-4 w-4" /> 2. Ubicación del Vehículo
+            </h4>
 
-          {/* FECHA Y HORA EN LA MISMA FILA */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* 1. Selector de Fecha */}
-            <FormField
-              control={form.control}
-              name="booking_date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel className="text-zinc-300">Fecha</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal bg-zinc-950 border-zinc-800 hover:bg-zinc-900 hover:text-white text-white",
-                            !field.value && "text-muted-foreground",
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, "d MMM", { locale: es })
-                          ) : (
-                            <span>Elegir día</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="w-auto p-0 bg-zinc-900 border-zinc-800"
-                      align="start"
-                    >
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date < new Date() || date < new Date("1900-01-01")
-                        }
-                        initialFocus
-                        className="text-white"
+            {/* FILA 1: CP y Colonia (Auto-rellenable) */}
+            <div className="grid grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="address_zip"
+                render={({ field }) => (
+                  <FormItem className="col-span-1">
+                    <FormLabel className="text-zinc-300">C.P.</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="31..."
+                        maxLength={5}
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800 text-white font-mono"
                       />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {/* 2. Selector de Hora (Nuevo) */}
+              <FormField
+                control={form.control}
+                name="address_colonia"
+                render={({ field }) => (
+                  <FormItem className="col-span-2">
+                    <FormLabel className="text-zinc-300">Colonia</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Ej. Centro"
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* FILA 2: Calle y Número */}
+            <div className="grid grid-cols-4 gap-4">
+              <FormField
+                control={form.control}
+                name="address_street"
+                render={({ field }) => (
+                  <FormItem className="col-span-3">
+                    <FormLabel className="text-zinc-300">Calle</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Av. Universidad"
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="address_number"
+                render={({ field }) => (
+                  <FormItem className="col-span-1">
+                    <FormLabel className="text-zinc-300">Número</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="#123"
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+
+          {/* SECCIÓN 3: CITA */}
+          <div className="space-y-4 pt-2">
+            <h4 className="text-sm font-semibold text-orange-500 uppercase tracking-wider">
+              3. Detalles del Servicio
+            </h4>
             <FormField
               control={form.control}
-              name="booking_time"
+              name="service_type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-zinc-300">Hora</FormLabel>
+                  <FormLabel className="text-zinc-300">Paquete</FormLabel>
                   <Select
                     onValueChange={field.onChange}
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger className="bg-zinc-950 border-zinc-800 text-zinc-300">
-                        <SelectValue placeholder="Hora" />
+                      <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                        <SelectValue placeholder="Selecciona..." />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-300">
-                      {TIME_SLOTS.map((time) => (
-                        <SelectItem key={time} value={time}>
-                          {time}
-                        </SelectItem>
-                      ))}
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                      <SelectItem value="Lavado Express">
+                        Lavado Express ($350)
+                      </SelectItem>
+                      <SelectItem value="Detallado Premium">
+                        Detallado Premium ($950)
+                      </SelectItem>
+                      <SelectItem value="Cerámico Total">
+                        Cerámico Total ($2,500)
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* CALENDARIO */}
+              <FormField
+                control={form.control}
+                name="booking_date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-zinc-300">Fecha</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal bg-zinc-950 border-zinc-800 hover:bg-zinc-900 text-white",
+                              !field.value && "text-muted-foreground",
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "d MMM", { locale: es })
+                            ) : (
+                              <span>Elegir día</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-auto p-0 bg-zinc-900 border-zinc-800"
+                        align="start"
+                      >
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                          className="text-white"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* HORA */}
+              <FormField
+                control={form.control}
+                name="booking_time"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-zinc-300">Hora</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                          <SelectValue placeholder="Hora" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        {TIME_SLOTS.map((time) => (
+                          <SelectItem key={time} value={time}>
+                            {time}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </div>
 
           <Button
             type="submit"
-            className="w-full bg-orange-600 hover:bg-orange-700 font-bold"
+            className="w-full bg-orange-600 hover:bg-orange-700 font-bold py-6 text-lg"
             disabled={isSubmitting}
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Agendando...
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Procesando...
               </>
             ) : (
-              "Confirmar Reserva"
+              "Confirmar Dirección y Cita"
             )}
           </Button>
         </form>
