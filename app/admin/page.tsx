@@ -41,6 +41,7 @@ interface Booking {
   phone: string;
   service_type: string;
   booking_date: string;
+  booking_time: string;
   status: string;
 }
 
@@ -224,11 +225,15 @@ export default function AdminPage() {
                     </TableCell>
 
                     <TableCell className="text-zinc-300">
-                      {format(new Date(booking.booking_date), "EEE, d MMM", {
-                        locale: es,
-                      })}
-                      <div className="text-xs text-zinc-500">
-                        {format(new Date(booking.booking_date), "yyyy")}
+                      <div className="font-medium">
+                        {format(new Date(booking.booking_date), "EEE, d MMM", {
+                          locale: es,
+                        })}
+                      </div>
+
+                      <div className="flex items-center gap-1 text-xs text-orange-400 mt-1">
+                        <Clock className="h-3 w-3" />{" "}
+                        {booking.booking_time || "S/H"}
                       </div>
                     </TableCell>
 
