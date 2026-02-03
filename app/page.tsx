@@ -12,11 +12,6 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center bg-black selection:bg-orange-500 selection:text-white">
       <Hero />
-      {/* --- ZONA DE PRUEBAS --- */}
-      <section className="py-12 bg-zinc-950">
-        <BookingForm />
-      </section>
-      {/* ----------------------- */}
       <Features />
       <Pricing />
       <Testimonials />
