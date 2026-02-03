@@ -92,9 +92,13 @@ export function BookingForm() {
     }
   }, [zipCode, form]);
 
+  const BUSINESS_PHONE = "526141234567"; // <--- NUMERO DE EJEMPLO
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
+
     try {
+      // 1. Guardar en Supabase (Tu respaldo administrativo)
       const { error } = await supabase.from("bookings").insert([
         {
           name: values.name,
@@ -103,7 +107,6 @@ export function BookingForm() {
           service_type: values.service_type,
           booking_date: values.booking_date.toISOString(),
           booking_time: values.booking_time,
-          // Guardamos la dirección completa
           address_street: values.address_street,
           address_number: values.address_number,
           address_zip: values.address_zip,
@@ -113,11 +116,31 @@ export function BookingForm() {
       ]);
 
       if (error) throw error;
-      alert("¡Reserva completada! Vamos en camino.");
+
+      // 2. Preparar el mensaje de WhatsApp
+      const fechaFormato = format(values.booking_date, "EEEE d 'de' MMMM", {
+        locale: es,
+      });
+
+      const whatsappMessage = `Hola *Detailing SaaS*! 🚗✨
+Quiero confirmar mi reserva que acabo de hacer en la web:
+
+👤 *Cliente:* ${values.name}
+🛠 *Servicio:* ${values.service_type}
+📅 *Fecha:* ${fechaFormato}
+⏰ *Hora:* ${values.booking_time}
+📍 *Zona:* ${values.address_colonia}
+
+¿Me confirman la disponibilidad?`;
+
+      const whatsappUrl = `https://wa.me/${BUSINESS_PHONE}?text=${encodeURIComponent(whatsappMessage)}`;
+
+      window.location.href = whatsappUrl;
+
       form.reset();
     } catch (error: any) {
-      console.error(error);
-      alert("Error al guardar.");
+      console.error("Error detallado:", error);
+      alert(`Error al guardar: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
