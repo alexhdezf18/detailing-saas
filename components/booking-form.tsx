@@ -79,9 +79,14 @@ export function BookingForm() {
 
       alert("¡Cita agendada! Revisa tu correo.");
       form.reset();
-    } catch (error) {
-      console.error("Error:", error);
-      alert("Hubo un error al guardar.");
+    } catch (error: any) {
+      console.error("Error detallado:", error);
+      console.error(
+        "Mensaje de Supabase:",
+        error.message || error.details || "Sin detalles",
+      );
+
+      alert(`Error: ${error.message || "Hubo un error al guardar."}`);
     } finally {
       setIsSubmitting(false);
     }

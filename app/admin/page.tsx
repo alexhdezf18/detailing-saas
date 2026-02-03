@@ -16,9 +16,23 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/navbar";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import {
+  LogOut,
+  MoreHorizontal,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  CheckSquare,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-// ... (interface Booking se mantiene igual)
 interface Booking {
   id: number;
   created_at: string;
@@ -36,28 +50,22 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // 1. EFECTO DE SEGURIDAD: Verificar si hay usuario
   useEffect(() => {
     async function checkAuth() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-
       if (!session) {
-        // Si no hay sesión, ¡fuera de aquí!
         router.push("/login");
       } else {
-        // Si hay sesión, permitimos ver la página
         setIsAuthenticated(true);
       }
     }
-
     checkAuth();
   }, [router]);
 
-  // 2. EFECTO DE DATOS: Cargar las citas (Solo si está autenticado)
   useEffect(() => {
-    if (!isAuthenticated) return; // No cargar datos si no está logueado
+    if (!isAuthenticated) return;
 
     async function fetchBookings() {
       try {
@@ -76,15 +84,54 @@ export default function AdminPage() {
     }
 
     fetchBookings();
-  }, [isAuthenticated]); // Se ejecuta cuando isAuthenticated cambia a true
+  }, [isAuthenticated]);
 
-  // Función para cerrar sesión
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
 
-  // Si no está autenticado, mostramos pantalla negra (o un loader) para evitar "parpadeos"
+  const updateStatus = async (id: number, newStatus: string) => {
+    setBookings((prev) =>
+      prev.map((booking) =>
+        booking.id === id ? { ...booking, status: newStatus } : booking,
+      ),
+    );
+
+    const { error } = await supabase
+      .from("bookings")
+      .update({ status: newStatus })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error actualizando:", error);
+      alert("Error al actualizar. Recarga la página.");
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "confirmed":
+        return "bg-green-900 text-green-300 hover:bg-green-900";
+      case "completed":
+        return "bg-blue-900 text-blue-300 hover:bg-blue-900";
+      case "cancelled":
+        return "bg-red-900 text-red-300 hover:bg-red-900";
+      default:
+        return "bg-yellow-900/50 text-yellow-500 hover:bg-yellow-900/50";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      pending: "Pendiente",
+      confirmed: "Confirmada",
+      completed: "Completada",
+      cancelled: "Cancelada",
+    };
+    return labels[status] || status;
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center text-white">
@@ -115,25 +162,23 @@ export default function AdminPage() {
             >
               {bookings.length} Citas
             </Badge>
-
-            {/* Botón de Cerrar Sesión */}
             <Button variant="destructive" size="sm" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" /> Salir
             </Button>
           </div>
         </div>
 
-        {/* ... (La tabla sigue igual que antes) ... */}
         <div className="rounded-md border border-zinc-800 bg-zinc-900/50">
           <Table>
-            {/* ... Pega aquí el contenido de la tabla que ya tenías ... */}
             <TableHeader>
               <TableRow className="border-zinc-800 hover:bg-transparent">
                 <TableHead className="text-zinc-400">Cliente</TableHead>
                 <TableHead className="text-zinc-400">Servicio</TableHead>
                 <TableHead className="text-zinc-400">Fecha Cita</TableHead>
-                <TableHead className="text-zinc-400">Contacto</TableHead>
                 <TableHead className="text-zinc-400">Estado</TableHead>
+                <TableHead className="text-zinc-400 text-right">
+                  Acciones
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -166,34 +211,93 @@ export default function AdminPage() {
                       <div className="text-xs text-zinc-500">
                         {booking.email}
                       </div>
+                      <div className="text-xs text-zinc-500 md:hidden">
+                        {booking.phone}
+                      </div>
                     </TableCell>
+
                     <TableCell className="text-zinc-300">
-                      <Badge className="bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700">
+                      <Badge
+                        variant="secondary"
+                        className="bg-zinc-800 text-zinc-300 border-zinc-700"
+                      >
                         {booking.service_type}
                       </Badge>
                     </TableCell>
+
                     <TableCell className="text-zinc-300">
-                      {format(
-                        new Date(booking.booking_date),
-                        "EEE, d MMM yyyy",
-                        { locale: es },
-                      )}
+                      {format(new Date(booking.booking_date), "EEE, d MMM", {
+                        locale: es,
+                      })}
+                      <div className="text-xs text-zinc-500">
+                        {format(new Date(booking.booking_date), "yyyy")}
+                      </div>
                     </TableCell>
-                    <TableCell className="text-zinc-300">
-                      {booking.phone}
-                    </TableCell>
+
                     <TableCell>
-                      <Badge
-                        className={
-                          booking.status === "confirmed"
-                            ? "bg-green-900 text-green-300"
-                            : "bg-yellow-900/50 text-yellow-500"
-                        }
-                      >
-                        {booking.status === "pending"
-                          ? "Pendiente"
-                          : booking.status}
+                      <Badge className={getStatusColor(booking.status)}>
+                        {getStatusLabel(booking.status)}
                       </Badge>
+                    </TableCell>
+
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-zinc-400 hover:text-white"
+                          >
+                            <span className="sr-only">Abrir menú</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="bg-zinc-900 border-zinc-800 text-zinc-300"
+                        >
+                          <DropdownMenuLabel>Cambiar Estatus</DropdownMenuLabel>
+                          <DropdownMenuSeparator className="bg-zinc-800" />
+
+                          <DropdownMenuItem
+                            onClick={() =>
+                              updateStatus(booking.id, "confirmed")
+                            }
+                            className="hover:bg-zinc-800 cursor-pointer"
+                          >
+                            <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />{" "}
+                            Confirmar
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onClick={() =>
+                              updateStatus(booking.id, "completed")
+                            }
+                            className="hover:bg-zinc-800 cursor-pointer"
+                          >
+                            <CheckSquare className="mr-2 h-4 w-4 text-blue-500" />{" "}
+                            Completar
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onClick={() => updateStatus(booking.id, "pending")}
+                            className="hover:bg-zinc-800 cursor-pointer"
+                          >
+                            <Clock className="mr-2 h-4 w-4 text-yellow-500" />{" "}
+                            Pendiente
+                          </DropdownMenuItem>
+
+                          <DropdownMenuSeparator className="bg-zinc-800" />
+
+                          <DropdownMenuItem
+                            onClick={() =>
+                              updateStatus(booking.id, "cancelled")
+                            }
+                            className="text-red-500 hover:bg-zinc-800 hover:text-red-400 cursor-pointer"
+                          >
+                            <XCircle className="mr-2 h-4 w-4" /> Cancelar Cita
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))
