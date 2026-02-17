@@ -33,6 +33,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 
 // --- CONFIGURACIÓN ---
 // Tus horarios estándar de trabajo
@@ -54,7 +55,7 @@ const CODIGOS_POSTALES_DEMO: Record<string, string> = {
   "31064": "Robinson",
 };
 
-const BUSINESS_PHONE = "526141234567"; // <--- TU NÚMERO
+const BUSINESS_PHONE = "6142730355";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Requerido" }),
@@ -88,7 +89,6 @@ export function BookingForm() {
     },
   });
 
-  // 1. AUTOCOMPLETADO DE CP
   const zipCode = form.watch("address_zip");
   useEffect(() => {
     if (zipCode && zipCode.length === 5) {
@@ -97,7 +97,6 @@ export function BookingForm() {
     }
   }, [zipCode, form]);
 
-  // 2. LÓGICA DE DISPONIBILIDAD (La Magia Nueva)
   const selectedDate = form.watch("booking_date");
 
   useEffect(() => {
@@ -105,27 +104,21 @@ export function BookingForm() {
       if (!selectedDate) return;
 
       setIsLoadingSlots(true);
-      // Formatear fecha para buscar en DB (YYYY-MM-DDT...)
-      // Nota: Supabase guarda en ISO, compararemos por día
 
-      // Truco: Convertimos la fecha seleccionada al inicio y fin del día para buscar
       const startOfDay = new Date(selectedDate);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(selectedDate);
       endOfDay.setHours(23, 59, 59, 999);
 
-      // Buscamos todas las citas ACTIVAS de ese día (excluyendo canceladas)
       const { data: takenBookings } = await supabase
         .from("bookings")
         .select("booking_time")
         .gte("booking_date", startOfDay.toISOString())
         .lte("booking_date", endOfDay.toISOString())
-        .neq("status", "cancelled"); // Si está cancelada, la hora queda libre de nuevo
-
+        .neq("status", "cancelled");
       if (takenBookings) {
         const takenTimes = takenBookings.map((b) => b.booking_time);
 
-        // Filtramos: Las horas libres son las del Default MENOS las ocupadas
         const freeSlots = DEFAULT_TIME_SLOTS.filter(
           (slot) => !takenTimes.includes(slot),
         );
@@ -139,7 +132,9 @@ export function BookingForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
+
     try {
+      // 1. Guardar en Base de Datos (Server Action)
       const result = await createBooking({
         ...values,
         booking_date: values.booking_date.toISOString(),
@@ -147,20 +142,35 @@ export function BookingForm() {
 
       if (!result.success) throw new Error(result.message);
 
+      // 2. Preparar Link de WhatsApp (DEFINIRLO ANTES DE USARLO)
       const fechaFormato = format(values.booking_date, "EEEE d 'de' MMMM", {
         locale: es,
       });
-      const whatsappUrl = `https://wa.me/${BUSINESS_PHONE}?text=${encodeURIComponent(`Hola, quiero confirmar mi reserva para el ${fechaFormato} a las ${values.booking_time}.`)}`;
 
-      window.location.href = whatsappUrl;
-      form.reset();
+      const whatsappUrl = `https://wa.me/${BUSINESS_PHONE}?text=${encodeURIComponent(
+        `Hola, quiero confirmar mi reserva para el ${fechaFormato} a las ${values.booking_time}.`,
+      )}`;
+
+      // 3. Mostrar Notificación Elegante (Toast)
+      toast.success("¡Reserva Agendada!", {
+        description: "Te estamos redirigiendo a WhatsApp para confirmar...",
+        duration: 3000,
+      });
+
+      // 4. Redirigir con un pequeño retraso (para que alcancen a leer)
+      setTimeout(() => {
+        window.location.href = whatsappUrl;
+        form.reset();
+      }, 2000); // 2 segundos de espera
     } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      console.error(error);
+      toast.error("Hubo un error", {
+        description: error.message || "No se pudo conectar con el servidor.",
+      });
     } finally {
       setIsSubmitting(false);
     }
   }
-
   return (
     <div className="w-full max-w-2xl mx-auto p-6 bg-zinc-900/50 backdrop-blur-lg rounded-xl border border-zinc-800 shadow-2xl">
       <div className="mb-6 text-center">
