@@ -134,7 +134,6 @@ export function BookingForm() {
     setIsSubmitting(true);
 
     try {
-      // 1. Guardar en Base de Datos (Server Action)
       const result = await createBooking({
         ...values,
         booking_date: values.booking_date.toISOString(),
@@ -142,7 +141,6 @@ export function BookingForm() {
 
       if (!result.success) throw new Error(result.message);
 
-      // 2. Preparar Link de WhatsApp (DEFINIRLO ANTES DE USARLO)
       const fechaFormato = format(values.booking_date, "EEEE d 'de' MMMM", {
         locale: es,
       });
@@ -151,17 +149,15 @@ export function BookingForm() {
         `Hola, quiero confirmar mi reserva para el ${fechaFormato} a las ${values.booking_time}.`,
       )}`;
 
-      // 3. Mostrar Notificación Elegante (Toast)
       toast.success("¡Reserva Agendada!", {
         description: "Te estamos redirigiendo a WhatsApp para confirmar...",
         duration: 3000,
       });
 
-      // 4. Redirigir con un pequeño retraso (para que alcancen a leer)
       setTimeout(() => {
         window.location.href = whatsappUrl;
         form.reset();
-      }, 2000); // 2 segundos de espera
+      }, 2000);
     } catch (error: any) {
       console.error(error);
       toast.error("Hubo un error", {
