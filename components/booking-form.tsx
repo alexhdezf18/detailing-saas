@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { WeatherWidget } from "@/components/weather-widget";
 
 // --- CONFIGURACIÓN ---
 // Tus horarios estándar de trabajo
@@ -261,6 +262,7 @@ export function BookingForm() {
                       </PopoverContent>
                     </Popover>
                     <FormMessage />
+                    <WeatherWidget date={field.value} />
                   </FormItem>
                 )}
               />
