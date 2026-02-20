@@ -253,7 +253,7 @@ export function BookingForm() {
                           selected={field.value}
                           onSelect={(date) => {
                             field.onChange(date);
-                            form.setValue("booking_time", ""); // Resetear hora al cambiar día
+                            form.setValue("booking_time", "");
                           }}
                           disabled={(date) => date < new Date()}
                           initialFocus

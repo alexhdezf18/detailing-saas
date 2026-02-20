@@ -1,9 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-// 1. Leemos las variables de entorno que acabas de configurar
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-// 2. Creamos y exportamos la conexión ("el cliente")
-// El signo de exclamación (!) le dice a TypeScript: "Confía en mí, estas variables SÍ existen"
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Creamos el cliente usando la nueva librería que maneja las cookies automáticamente
+export const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+);
