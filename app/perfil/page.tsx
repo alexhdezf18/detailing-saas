@@ -6,34 +6,46 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Loader2, Copy, Gift, Calendar, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Navbar } from "@/components/navbar";
 
 export default function ProfilePage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Simulación de datos (En el siguiente paso los conectaremos a la DB real)
-  const REFERRAL_CODE = "ALEX-2026";
-  const REFERRALS_COUNT = 2; // Llevas 2 de 5
-
   useEffect(() => {
-    async function getUser() {
+    async function getUserAndProfile() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
       if (!user) {
         router.push("/login");
-      } else {
-        setUser(user);
+        return;
       }
+
+      setUser(user);
+
+      const { data: profileData, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (profileData) {
+        setProfile(profileData);
+      } else {
+        console.error("Error cargando perfil:", error);
+        toast.error("No se pudo cargar tu información de referidos.");
+      }
+
       setLoading(false);
     }
-    getUser();
+
+    getUserAndProfile();
   }, [router]);
 
   const handleLogout = async () => {
@@ -42,7 +54,8 @@ export default function ProfilePage() {
   };
 
   const copyCode = () => {
-    navigator.clipboard.writeText(REFERRAL_CODE);
+    if (!profile) return;
+    navigator.clipboard.writeText(profile.referral_code);
     toast.success("¡Código copiado!", {
       description: "Compártelo con tus amigos.",
     });
@@ -58,7 +71,6 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen bg-black pb-20">
-      {/* Navbar Manual (o reusar el componente si ya maneja auth) */}
       <div className="container mx-auto px-4 py-8">
         {/* HEADER PERFIL */}
         <div className="flex flex-col md:flex-row gap-6 items-center mb-12">
@@ -71,7 +83,10 @@ export default function ProfilePage() {
 
           <div className="text-center md:text-left space-y-2">
             <h1 className="text-3xl font-bold text-white">
-              Hola, {user?.user_metadata?.full_name || "Cliente"}
+              Hola,{" "}
+              {profile?.full_name ||
+                user?.user_metadata?.full_name ||
+                "Cliente"}
             </h1>
             <p className="text-zinc-400">{user?.email}</p>
             <div className="flex gap-2 justify-center md:justify-start">
@@ -83,8 +98,8 @@ export default function ProfilePage() {
               >
                 <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
               </Button>
-              {/* Si el email es el tuyo, botón para ir al admin */}
-              {user?.email === "alexhdezf18@gmail.com" && ( // <--- CAMBIA TU EMAIL AQUÍ
+              {/* Acceso directo a tu Admin si eres tú */}
+              {user?.email === "alexhdezf18@gmail.com" && (
                 <Link href="/admin">
                   <Button variant="secondary" size="sm">
                     Ir al Admin
@@ -110,20 +125,21 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-zinc-400 text-sm">
-                Invita a 5 amigos y obtén un servicio "Detallado Premium"
-                totalmente gratis.
+                Invita a 5 amigos. Cuando ellos agenden usando tu código, tú
+                sumas puntos. ¡A los 5, tu próximo Detallado Premium va por
+                nuestra cuenta!
               </p>
 
               {/* Barra de Progreso */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm font-medium text-white">
                   <span>Tu progreso</span>
-                  <span>{REFERRALS_COUNT} / 5 amigos</span>
+                  <span>{profile?.points || 0} / 5 amigos</span>
                 </div>
                 <div className="h-3 w-full bg-zinc-800 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-orange-600 to-yellow-500 transition-all duration-1000"
-                    style={{ width: `${(REFERRALS_COUNT / 5) * 100}%` }}
+                    style={{ width: `${((profile?.points || 0) / 5) * 100}%` }}
                   />
                 </div>
               </div>
@@ -135,7 +151,7 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <code className="text-orange-400 font-mono font-bold text-lg tracking-wider">
-                    {REFERRAL_CODE}
+                    {profile?.referral_code || "Cargando..."}
                   </code>
                   <Button
                     size="icon"
@@ -150,7 +166,7 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          {/* TARJETA DE HISTORIAL (Placeholder) */}
+          {/* TARJETA DE HISTORIAL */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
@@ -160,10 +176,10 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent>
               <div className="text-center py-8 text-zinc-500 border border-dashed border-zinc-800 rounded-lg">
-                <p>Aún no tienes historial de reservas.</p>
+                <p>Próximamente verás aquí tus reservas pasadas.</p>
                 <Link href="/reservar">
-                  <Button variant="link" className="text-orange-500">
-                    ¡Agenda la primera!
+                  <Button variant="link" className="text-orange-500 mt-2">
+                    ¡Agenda tu cita hoy!
                   </Button>
                 </Link>
               </div>
