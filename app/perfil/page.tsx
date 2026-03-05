@@ -6,18 +6,30 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Copy, Gift, Calendar, LogOut } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Loader2,
+  Copy,
+  Gift,
+  Calendar,
+  LogOut,
+  Clock,
+  MapPin,
+} from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
 export default function ProfilePage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function getUserAndProfile() {
+    async function getUserAndData() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -29,23 +41,26 @@ export default function ProfilePage() {
 
       setUser(user);
 
-      const { data: profileData, error } = await supabase
+      const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", user.id)
         .single();
 
-      if (profileData) {
-        setProfile(profileData);
-      } else {
-        console.error("Error cargando perfil:", error);
-        toast.error("No se pudo cargar tu información de referidos.");
-      }
+      if (profileData) setProfile(profileData);
+
+      const { data: bookingsData } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("email", user.email)
+        .order("booking_date", { ascending: false });
+
+      if (bookingsData) setBookings(bookingsData);
 
       setLoading(false);
     }
 
-    getUserAndProfile();
+    getUserAndData();
   }, [router]);
 
   const handleLogout = async () => {
@@ -61,6 +76,29 @@ export default function ProfilePage() {
     });
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "confirmed":
+        return "bg-green-900/50 text-green-300 border-green-800";
+      case "completed":
+        return "bg-blue-900/50 text-blue-300 border-blue-800";
+      case "cancelled":
+        return "bg-red-900/50 text-red-300 border-red-800";
+      default:
+        return "bg-yellow-900/50 text-yellow-500 border-yellow-800";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      pending: "Pendiente",
+      confirmed: "Confirmada",
+      completed: "Completada",
+      cancelled: "Cancelada",
+    };
+    return labels[status] || status;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -72,7 +110,6 @@ export default function ProfilePage() {
   return (
     <main className="min-h-screen bg-black pb-20">
       <div className="container mx-auto px-4 py-8">
-        {/* HEADER PERFIL */}
         <div className="flex flex-col md:flex-row gap-6 items-center mb-12">
           <Avatar className="h-24 w-24 border-2 border-orange-500">
             <AvatarImage src={user?.user_metadata?.avatar_url} />
@@ -98,7 +135,6 @@ export default function ProfilePage() {
               >
                 <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
               </Button>
-              {/* Acceso directo a tu Admin si eres tú */}
               {user?.email === "alexhdezf18@gmail.com" && (
                 <Link href="/admin">
                   <Button variant="secondary" size="sm">
@@ -110,10 +146,8 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* SECCIÓN REFERIDOS */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* TARJETA DE PROGRESO */}
-          <Card className="bg-zinc-900 border-zinc-800 relative overflow-hidden">
+        <div className="grid lg:grid-cols-2 gap-6">
+          <Card className="bg-zinc-900 border-zinc-800 relative overflow-hidden h-fit">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <Gift className="h-32 w-32 text-orange-500" />
             </div>
@@ -129,8 +163,6 @@ export default function ProfilePage() {
                 sumas puntos. ¡A los 5, tu próximo Detallado Premium va por
                 nuestra cuenta!
               </p>
-
-              {/* Barra de Progreso */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm font-medium text-white">
                   <span>Tu progreso</span>
@@ -143,8 +175,6 @@ export default function ProfilePage() {
                   />
                 </div>
               </div>
-
-              {/* Código de Referido */}
               <div className="bg-black/50 p-3 rounded-lg border border-zinc-800 flex items-center justify-between mt-4">
                 <div className="text-xs text-zinc-500 uppercase tracking-widest">
                   Tu código:
@@ -166,23 +196,70 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          {/* TARJETA DE HISTORIAL */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Calendar className="text-blue-500 h-5 w-5" />
-                Tus Reservas
+              <CardTitle className="text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="text-blue-500 h-5 w-5" />
+                  Tus Reservas
+                </div>
+                <Badge
+                  variant="outline"
+                  className="text-zinc-400 border-zinc-700"
+                >
+                  {bookings.length}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-zinc-500 border border-dashed border-zinc-800 rounded-lg">
-                <p>Próximamente verás aquí tus reservas pasadas.</p>
-                <Link href="/reservar">
-                  <Button variant="link" className="text-orange-500 mt-2">
-                    ¡Agenda tu cita hoy!
-                  </Button>
-                </Link>
-              </div>
+              {bookings.length === 0 ? (
+                <div className="text-center py-8 text-zinc-500 border border-dashed border-zinc-800 rounded-lg">
+                  <p>Aún no tienes historial de reservas.</p>
+                  <Link href="/reservar">
+                    <Button variant="link" className="text-orange-500 mt-2">
+                      ¡Agenda tu primera cita!
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  {bookings.map((booking) => (
+                    <div
+                      key={booking.id}
+                      className="p-4 rounded-lg border border-zinc-800 bg-black/40 flex flex-col gap-3"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-semibold text-white">
+                            {booking.service_type}
+                          </h4>
+                          <div className="flex items-center gap-2 text-xs text-zinc-400 mt-1">
+                            <Clock className="h-3 w-3" />
+                            {format(
+                              new Date(booking.booking_date),
+                              "d MMM yyyy",
+                              { locale: es },
+                            )}{" "}
+                            a las {booking.booking_time}
+                          </div>
+                        </div>
+                        <Badge
+                          className={`border ${getStatusColor(booking.status)}`}
+                        >
+                          {getStatusLabel(booking.status)}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-zinc-500">
+                        <MapPin className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">
+                          {booking.address_street} {booking.address_number},{" "}
+                          {booking.address_colonia}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
