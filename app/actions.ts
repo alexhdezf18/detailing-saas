@@ -5,13 +5,10 @@ import { createClient } from "@supabase/supabase-js";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Necesitamos un cliente de Supabase con permisos de admin para insertar desde el servidor
-// O usamos las variables públicas si tenemos RLS configurado para permitir inserts públicos (que ya lo hicimos)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Función para generar el link de Google Calendar
 function generateGoogleCalendarLink(
   date: string,
   time: string,
@@ -19,12 +16,10 @@ function generateGoogleCalendarLink(
   address: string,
   name: string,
 ) {
-  // 1. Calcular fechas inicio y fin
-  // Asumimos que el servicio dura 2 horas aprox para el calendario
   const startDateTime = new Date(
     `${date.split("T")[0]} ${convertTo24Hour(time)}`,
   );
-  const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000); // +2 horas
+  const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000);
 
   const formatGoogleDate = (d: Date) =>
     d.toISOString().replace(/-|:|\.\d\d\d/g, "");
@@ -40,7 +35,6 @@ function generateGoogleCalendarLink(
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
-// Auxiliar para convertir "03:00 PM" a "15:00"
 function convertTo24Hour(timeStr: string) {
   const [time, modifier] = timeStr.split(" ");
   let [hours, minutes] = time.split(":");
@@ -49,7 +43,6 @@ function convertTo24Hour(timeStr: string) {
   return `${hours}:${minutes}:00`;
 }
 
-// --- LA ACCIÓN PRINCIPAL ---
 export async function createBooking(formData: any) {
   const {
     name,
@@ -62,9 +55,10 @@ export async function createBooking(formData: any) {
     address_colonia,
     address_street,
     address_number,
+    referral_code, // <--- NUEVO: Recibimos el código
   } = formData;
 
-  // 1. Guardar en Supabase
+  // 1. Guardar Reserva en Supabase
   const { error: dbError } = await supabase.from("bookings").insert([
     {
       name,
@@ -79,6 +73,7 @@ export async function createBooking(formData: any) {
       address_number,
       address_city: "Chihuahua, CHIH",
       status: "pending",
+      referral_code: referral_code ? referral_code.toUpperCase() : null, // <--- Lo guardamos en mayúsculas
     },
   ]);
 
@@ -89,7 +84,22 @@ export async function createBooking(formData: any) {
     };
   }
 
-  // 2. Preparar Link de Calendario
+  if (referral_code) {
+    const { data: referrer } = await supabase
+      .from("profiles")
+      .select("id, points")
+      .eq("referral_code", referral_code.toUpperCase())
+      .single();
+
+    if (referrer) {
+      await supabase
+        .from("profiles")
+        .update({ points: referrer.points + 1 })
+        .eq("id", referrer.id);
+    }
+  }
+
+  // 3. Preparar Link de Calendario
   const calendarLink = generateGoogleCalendarLink(
     booking_date,
     booking_time,
@@ -98,10 +108,10 @@ export async function createBooking(formData: any) {
     name,
   );
 
-  // 3. Enviar Correo al Administrador (A TI)
+  // 4. Enviar Correo al Administrador
   try {
     await resend.emails.send({
-      from: "onboarding@resend.dev", // Correo de prueba de Resend
+      from: "onboarding@resend.dev",
       to: "alexhdezf18@gmail.com",
       subject: `🎉 Nueva Reserva: ${service_type} - ${name}`,
       html: `
@@ -111,6 +121,7 @@ export async function createBooking(formData: any) {
         <p><strong>Servicio:</strong> ${service_type}</p>
         <p><strong>Fecha:</strong> ${new Date(booking_date).toLocaleDateString()}</p>
         <p><strong>Hora:</strong> ${booking_time}</p>
+        <p><strong>Código de Referido usado:</strong> ${referral_code || "Ninguno"}</p>
         <hr />
         <p><strong>Dirección:</strong> ${address_street} ${address_number}, ${address_colonia}</p>
         <br />
@@ -121,7 +132,6 @@ export async function createBooking(formData: any) {
     });
   } catch (emailError) {
     console.error("Error enviando email:", emailError);
-    // No fallamos la reserva si falla el email, solo lo registramos
   }
 
   return { success: true, message: "Reserva creada y notificada" };

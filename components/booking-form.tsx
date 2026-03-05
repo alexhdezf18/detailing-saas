@@ -69,6 +69,7 @@ const formSchema = z.object({
   address_colonia: z.string().min(1),
   address_street: z.string().min(1),
   address_number: z.string().min(1),
+  referral_code: z.string().optional(),
 });
 
 export function BookingForm() {
@@ -87,6 +88,7 @@ export function BookingForm() {
       address_colonia: "",
       address_street: "",
       address_number: "",
+      referral_code: "",
     },
   });
 
@@ -451,7 +453,31 @@ export function BookingForm() {
               />
             </div>
           </div>
-
+          <div className="space-y-4 pt-4 border-t border-zinc-800">
+            <FormField
+              control={form.control}
+              name="referral_code"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-zinc-300">
+                    Código de Referido (Opcional)
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Ej. CUU-A7X9"
+                      {...field}
+                      className="bg-zinc-950 border-zinc-800 text-orange-400 font-mono uppercase placeholder:normal-case"
+                    />
+                  </FormControl>
+                  <p className="text-xs text-zinc-500">
+                    Si un amigo te invitó, ingresa su código para ayudarlo a
+                    ganar un lavado gratis.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
           <Button
             type="submit"
             className="w-full bg-orange-600 hover:bg-orange-700 font-bold py-6 text-lg"
