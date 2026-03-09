@@ -15,11 +15,22 @@ import {
   LogOut,
   Clock,
   MapPin,
+  Star,
+  MessageSquarePlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -28,17 +39,20 @@ export default function ProfilePage() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [reviewingId, setReviewingId] = useState<number | null>(null);
+  const [rating, setRating] = useState<number>(5);
+  const [reviewText, setReviewText] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
   useEffect(() => {
     async function getUserAndData() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
       if (!user) {
         router.push("/login");
         return;
       }
-
       setUser(user);
 
       const { data: profileData } = await supabase
@@ -46,7 +60,6 @@ export default function ProfilePage() {
         .select("*")
         .eq("id", user.id)
         .single();
-
       if (profileData) setProfile(profileData);
 
       const { data: bookingsData } = await supabase
@@ -56,10 +69,8 @@ export default function ProfilePage() {
         .order("booking_date", { ascending: false });
 
       if (bookingsData) setBookings(bookingsData);
-
       setLoading(false);
     }
-
     getUserAndData();
   }, [router]);
 
@@ -74,6 +85,33 @@ export default function ProfilePage() {
     toast.success("¡Código copiado!", {
       description: "Compártelo con tus amigos.",
     });
+  };
+
+  const submitReview = async () => {
+    if (!reviewingId) return;
+    setIsSubmittingReview(true);
+
+    const { error } = await supabase
+      .from("bookings")
+      .update({ rating, review_text: reviewText })
+      .eq("id", reviewingId);
+
+    if (error) {
+      toast.error("Error al enviar la reseña", { description: error.message });
+    } else {
+      toast.success("¡Gracias por tu opinión!", {
+        description: "Tu reseña nos ayuda a mejorar.",
+      });
+      setBookings((prev) =>
+        prev.map((b) =>
+          b.id === reviewingId ? { ...b, rating, review_text: reviewText } : b,
+        ),
+      );
+      setReviewingId(null);
+      setReviewText("");
+      setRating(5);
+    }
+    setIsSubmittingReview(false);
   };
 
   const getStatusColor = (status: string) => {
@@ -110,6 +148,7 @@ export default function ProfilePage() {
   return (
     <main className="min-h-screen bg-black pb-20">
       <div className="container mx-auto px-4 py-8">
+        {/* HEADER PERFIL */}
         <div className="flex flex-col md:flex-row gap-6 items-center mb-12">
           <Avatar className="h-24 w-24 border-2 border-orange-500">
             <AvatarImage src={user?.user_metadata?.avatar_url} />
@@ -147,6 +186,7 @@ export default function ProfilePage() {
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6">
+          {/* TARJETA DE PROGRESO */}
           <Card className="bg-zinc-900 border-zinc-800 relative overflow-hidden h-fit">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <Gift className="h-32 w-32 text-orange-500" />
@@ -196,12 +236,12 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
+          {/* TARJETA DE HISTORIAL CON RESEÑAS */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardHeader>
               <CardTitle className="text-white flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Calendar className="text-blue-500 h-5 w-5" />
-                  Tus Reservas
+                  <Calendar className="text-blue-500 h-5 w-5" /> Tus Reservas
                 </div>
                 <Badge
                   variant="outline"
@@ -249,12 +289,38 @@ export default function ProfilePage() {
                           {getStatusLabel(booking.status)}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-zinc-500">
-                        <MapPin className="h-3 w-3 flex-shrink-0" />
-                        <span className="truncate">
-                          {booking.address_street} {booking.address_number},{" "}
-                          {booking.address_colonia}
-                        </span>
+
+                      <div className="flex items-center justify-between border-t border-zinc-800/50 pt-2 mt-1">
+                        <div className="flex items-center gap-2 text-xs text-zinc-500">
+                          <MapPin className="h-3 w-3 flex-shrink-0" />
+                          <span className="truncate">
+                            {booking.address_street} {booking.address_number}
+                          </span>
+                        </div>
+
+                        {/* LÓGICA DE RESEÑAS */}
+                        {booking.status === "completed" && !booking.rating && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
+                            onClick={() => setReviewingId(booking.id)}
+                          >
+                            <MessageSquarePlus className="h-3 w-3 mr-1" />{" "}
+                            Calificar
+                          </Button>
+                        )}
+
+                        {booking.rating && (
+                          <div className="flex gap-0.5">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-3 w-3 ${star <= booking.rating ? "fill-orange-500 text-orange-500" : "text-zinc-700"}`}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -264,6 +330,64 @@ export default function ProfilePage() {
           </Card>
         </div>
       </div>
+
+      {/* MODAL DE RESEÑA */}
+      <Dialog
+        open={reviewingId !== null}
+        onOpenChange={(open) => !open && setReviewingId(null)}
+      >
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-white sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl">
+              ¿Qué te pareció el servicio?
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Tu opinión es muy importante para nosotros y nos ayuda a seguir
+              mejorando.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="flex justify-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setRating(star)}
+                  className="focus:outline-none transition-transform hover:scale-110"
+                >
+                  <Star
+                    className={`h-8 w-8 ${star <= rating ? "fill-orange-500 text-orange-500" : "text-zinc-600"}`}
+                  />
+                </button>
+              ))}
+            </div>
+            <Textarea
+              placeholder="Cuéntanos tu experiencia (Opcional)"
+              className="bg-zinc-950 border-zinc-800 text-white min-h-[100px]"
+              value={reviewText}
+              onChange={(e) => setReviewText(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setReviewingId(null)}
+              disabled={isSubmittingReview}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={submitReview}
+              disabled={isSubmittingReview}
+            >
+              {isSubmittingReview ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Enviar Reseña
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
