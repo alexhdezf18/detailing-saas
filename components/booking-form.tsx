@@ -6,7 +6,7 @@ import { z } from "zod";
 import { CalendarIcon, Loader2, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { createBooking } from "@/app/actions";
+import { createBooking, checkAvailability } from "@/app/actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -103,7 +103,7 @@ export function BookingForm() {
   const selectedDate = form.watch("booking_date");
 
   useEffect(() => {
-    async function checkAvailability() {
+    async function fetchDisponibilidad() {
       if (!selectedDate) return;
 
       setIsLoadingSlots(true);
@@ -113,24 +113,55 @@ export function BookingForm() {
       const endOfDay = new Date(selectedDate);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const { data: takenBookings } = await supabase
-        .from("bookings")
-        .select("booking_time")
-        .gte("booking_date", startOfDay.toISOString())
-        .lte("booking_date", endOfDay.toISOString())
-        .neq("status", "cancelled");
-      if (takenBookings) {
-        const takenTimes = takenBookings.map((b) => b.booking_time);
+      try {
+        const { data: takenBookings } = await supabase
+          .from("bookings")
+          .select("booking_time")
+          .gte("booking_date", startOfDay.toISOString())
+          .lte("booking_date", endOfDay.toISOString())
+          .neq("status", "cancelled");
 
-        const freeSlots = DEFAULT_TIME_SLOTS.filter(
-          (slot) => !takenTimes.includes(slot),
-        );
+        const takenTimes = takenBookings
+          ? takenBookings.map((b) => b.booking_time)
+          : [];
+
+        const googleRes = await checkAvailability(startOfDay.toISOString());
+        const googleEvents = googleRes.busySlots || [];
+
+        const freeSlots = DEFAULT_TIME_SLOTS.filter((slot) => {
+          if (takenTimes.includes(slot)) return false;
+
+          const [time, period] = slot.split(" ");
+          let [hours, minutes] = time.split(":").map(Number);
+
+          if (period === "PM" && hours !== 12) hours += 12;
+          if (period === "AM" && hours === 12) hours = 0;
+
+          const slotStart = new Date(selectedDate);
+          slotStart.setHours(hours, minutes, 0, 0);
+          const slotEnd = new Date(slotStart.getTime() + 2 * 60 * 60 * 1000);
+
+          const chocaConGoogle = googleEvents.some((evento: any) => {
+            if (!evento.start || !evento.end) return false;
+            const eventoInicio = new Date(evento.start);
+            const eventoFin = new Date(evento.end);
+
+            return slotStart < eventoFin && slotEnd > eventoInicio;
+          });
+
+          return !chocaConGoogle;
+        });
+
         setAvailableSlots(freeSlots);
+      } catch (error) {
+        console.error("Error validando disponibilidad:", error);
+        setAvailableSlots(DEFAULT_TIME_SLOTS);
+      } finally {
+        setIsLoadingSlots(false);
       }
-      setIsLoadingSlots(false);
     }
 
-    checkAvailability();
+    fetchDisponibilidad();
   }, [selectedDate]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {

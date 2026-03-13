@@ -2,6 +2,7 @@
 
 import { Resend } from "resend";
 import { createClient } from "@supabase/supabase-js";
+import { getBusyTimes } from "@/lib/calendar";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -135,4 +136,15 @@ export async function createBooking(formData: any) {
   }
 
   return { success: true, message: "Reserva creada y notificada" };
+}
+
+export async function checkAvailability(dateStr: string) {
+  try {
+    const date = new Date(dateStr);
+    const busySlots = await getBusyTimes(date);
+    return { success: true, busySlots };
+  } catch (error) {
+    console.error("Error leyendo Google Calendar:", error);
+    return { success: false, busySlots: [] };
+  }
 }
