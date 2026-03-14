@@ -57,7 +57,6 @@ const CODIGOS_POSTALES_DEMO: Record<string, string> = {
 
 const BUSINESS_PHONE = "6142730355";
 
-// 1. ZOD SCHEMA: Agregamos campos opcionales para la entrada manual
 const formSchema = z.object({
   name: z.string().min(2, { message: "Requerido" }),
   phone: z.string().min(10, { message: "10 dígitos requeridos" }),
@@ -71,10 +70,13 @@ const formSchema = z.object({
   address_number: z.string().min(1),
   referral_code: z.string().optional(),
   vehicle_make: z.string().min(1, { message: "Requerido" }),
-  custom_make: z.string().optional(), // Campo manual para marca
+  custom_make: z.string().optional(),
   vehicle_model: z.string().min(1, { message: "Requerido" }),
-  custom_model: z.string().optional(), // Campo manual para modelo
+  custom_model: z.string().optional(),
   trunk_vacuum: z.boolean(),
+  requirements_accepted: z.boolean().refine((val) => val === true, {
+    message: "Debes confirmar los requisitos para poder agendar.",
+  }),
 });
 
 export function BookingForm() {
@@ -101,6 +103,7 @@ export function BookingForm() {
       vehicle_model: "",
       custom_model: "",
       trunk_vacuum: false,
+      requirements_accepted: false,
     },
   });
 
@@ -116,7 +119,6 @@ export function BookingForm() {
     }
   }, [zipCode, form]);
 
-  // Lógica de API modificada: Si elige "Otro", no llamamos a la API
   useEffect(() => {
     async function fetchModels() {
       if (!selectedMake) {
@@ -124,7 +126,6 @@ export function BookingForm() {
         return;
       }
 
-      // Si selecciona "Otro", limpiamos modelos, pre-seleccionamos "Otro" en modelo y salimos
       if (selectedMake === "Otro") {
         setModelosDisponibles([]);
         form.setValue("vehicle_model", "Otro");
@@ -133,7 +134,7 @@ export function BookingForm() {
 
       setCargandoModelos(true);
       form.setValue("vehicle_model", "");
-      form.setValue("custom_model", ""); // Limpiamos el input manual por si acaso
+      form.setValue("custom_model", "");
 
       try {
         const res = await fetch(
@@ -153,7 +154,6 @@ export function BookingForm() {
     fetchModels();
   }, [selectedMake, form]);
 
-  // ... (El useEffect de fetchDisponibilidad de Supabase/Google queda exactamente igual) ...
   useEffect(() => {
     async function fetchDisponibilidad() {
       if (!selectedDate) return;
@@ -210,7 +210,6 @@ export function BookingForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
 
-    // INTERCEPCIÓN DE PAYLOAD: Si seleccionó "Otro", usamos el texto manual
     const finalMake =
       values.vehicle_make === "Otro"
         ? values.custom_make || "No especificado"
@@ -223,8 +222,8 @@ export function BookingForm() {
     try {
       const result = await createBooking({
         ...values,
-        vehicle_make: finalMake, // Sobreescribimos con la marca final
-        vehicle_model: finalModel, // Sobreescribimos con el modelo final
+        vehicle_make: finalMake,
+        vehicle_model: finalModel,
         booking_date: values.booking_date.toISOString(),
       });
 
@@ -721,6 +720,36 @@ export function BookingForm() {
                     />
                   </FormControl>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          {/* ==================== REQUISITOS DEL SERVICIO ==================== */}
+          <div className="pt-4 border-t border-zinc-800">
+            <FormField
+              control={form.control}
+              name="requirements_accepted"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-orange-500/30 p-4 bg-orange-500/10">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      className="border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white mt-1"
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel className="text-orange-400 font-semibold text-sm">
+                      Requisitos indispensables del servicio a domicilio
+                    </FormLabel>
+                    <p className="text-xs text-zinc-300 leading-relaxed">
+                      Confirmo que el lugar donde se lavará el vehículo cuenta
+                      con una <strong>toma de agua</strong> (llave de manguera)
+                      y un <strong>enchufe de corriente eléctrica</strong>{" "}
+                      accesibles a menos de 20 metros.
+                    </p>
+                    <FormMessage className="text-red-400 text-xs font-bold" />
+                  </div>
                 </FormItem>
               )}
             />

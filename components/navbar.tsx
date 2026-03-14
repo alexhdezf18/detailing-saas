@@ -1,6 +1,7 @@
-"use client"; // <--- Importante
+"use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -14,15 +15,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { User as UserIcon, LogOut, LayoutDashboard } from "lucide-react";
-import { useRouter } from "next/navigation";
+import {
+  User as UserIcon,
+  LogOut,
+  LayoutDashboard,
+  CalendarCheck,
+} from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+
+const ADMIN_EMAIL = "alexhdezf18@gmail.com";
 
 export function Navbar() {
   const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    // 1. Ver si ya hay usuario al cargar
     async function getUser() {
       const {
         data: { user },
@@ -31,7 +39,6 @@ export function Navbar() {
     }
     getUser();
 
-    // 2. Escuchar cambios (login/logout) en tiempo real
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
@@ -43,67 +50,93 @@ export function Navbar() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    router.push("/");
     router.refresh();
   };
 
+  const handleScrollToPrecios = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (pathname === "/") {
+      e.preventDefault();
+      const preciosSection = document.getElementById("precios");
+      if (preciosSection) {
+        preciosSection.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  };
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-black/50 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-black/60 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
-        {/* LOGO */}
+        {/* ==================== LOGO Y MARCA ==================== */}
         <Link
-          className="flex items-center gap-2 font-bold text-xl text-white"
+          className="flex items-center gap-3 font-extrabold text-xl text-white tracking-tight group"
           href="/"
         >
-          <span className="text-orange-500">Detailing</span>SaaS
+          <div className="relative h-10 w-10 overflow-hidden rounded-full border border-orange-500/20 shadow-lg shadow-orange-500/10 transition-transform group-hover:scale-105">
+            <Image
+              src="/logo.jpg"
+              alt="Logo Papotico's Wash"
+              fill
+              className="object-cover"
+              sizes="40px"
+            />
+          </div>
+
+          <div className="hidden sm:flex items-baseline gap-1">
+            <span className="text-orange-500 lowercase">papotico's</span>
+            <span className="uppercase tracking-widest text-xs text-zinc-300">
+              wash
+            </span>
+          </div>
         </Link>
 
-        {/* NAVEGACIÓN DESKTOP */}
-        <nav className="hidden gap-6 md:flex items-center">
+        {/* ==================== NAVEGACIÓN ==================== */}
+        <nav className="hidden gap-8 md:flex items-center">
           <Link
-            className="text-sm font-medium text-zinc-400 transition-colors hover:text-white"
+            className="text-sm font-medium text-zinc-400 transition-colors hover:text-orange-500 cursor-pointer"
             href="/#precios"
+            onClick={handleScrollToPrecios}
           >
             Precios
           </Link>
           <Link
-            className="text-sm font-medium text-zinc-400 transition-colors hover:text-white"
+            className="text-sm font-medium text-zinc-400 transition-colors hover:text-orange-500"
             href="/reservar"
           >
             Reservar
           </Link>
         </nav>
 
-        {/* BOTONES DE ACCIÓN */}
+        {/* ==================== SESIÓN ==================== */}
         <div className="flex items-center gap-4">
           {user ? (
-            // --- USUARIO LOGUEADO ---
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="relative h-9 w-9 rounded-full"
+                  className="relative h-10 w-10 rounded-full border-2 border-transparent hover:border-orange-500 transition-all"
                 >
-                  <Avatar className="h-9 w-9 border border-zinc-700">
+                  <Avatar className="h-9 w-9 bg-zinc-900">
                     <AvatarImage
                       src={user.user_metadata?.avatar_url}
-                      alt={user.email || ""}
+                      alt={user.email || "Usuario"}
                     />
-                    <AvatarFallback className="bg-orange-600 text-white">
+                    <AvatarFallback className="bg-orange-600 font-bold text-white">
                       {user.email?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                className="w-56 bg-zinc-900 border-zinc-800 text-zinc-300"
+                className="w-60 bg-zinc-900/95 backdrop-blur-md border-zinc-800 text-zinc-300 mt-2"
                 align="end"
               >
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none text-white">
-                      {user.user_metadata?.full_name}
+                <DropdownMenuLabel className="font-normal p-3">
+                  <div className="flex flex-col space-y-1.5">
+                    <p className="text-sm font-bold leading-none text-white">
+                      {user.user_metadata?.full_name || "Cliente Papotico's"}
                     </p>
-                    <p className="text-xs leading-none text-zinc-500">
+                    <p className="text-xs leading-none text-zinc-500 truncate">
                       {user.email}
                     </p>
                   </div>
@@ -112,48 +145,62 @@ export function Navbar() {
 
                 <DropdownMenuItem
                   asChild
-                  className="hover:bg-zinc-800 cursor-pointer"
+                  className="hover:bg-zinc-800/80 hover:text-white cursor-pointer py-2.5"
                 >
-                  <Link href="/perfil">
-                    <UserIcon className="mr-2 h-4 w-4" /> Mi Perfil
+                  <Link href="/mis-reservas">
+                    <CalendarCheck className="mr-2 h-4 w-4 text-orange-500" />{" "}
+                    Mis Citas
                   </Link>
                 </DropdownMenuItem>
 
-                {/* Solo mostramos Panel Admin si es tu correo */}
-                {/* Puedes ajustar esta lógica más tarde con roles reales */}
                 <DropdownMenuItem
                   asChild
-                  className="hover:bg-zinc-800 cursor-pointer"
+                  className="hover:bg-zinc-800/80 hover:text-white cursor-pointer py-2.5"
                 >
-                  <Link href="/admin">
-                    <LayoutDashboard className="mr-2 h-4 w-4" /> Panel Admin
+                  <Link href="/perfil">
+                    <UserIcon className="mr-2 h-4 w-4 text-orange-500" /> Mi
+                    Perfil
                   </Link>
                 </DropdownMenuItem>
+
+                {user.email === ADMIN_EMAIL && (
+                  <>
+                    <DropdownMenuSeparator className="bg-zinc-800" />
+                    <DropdownMenuItem
+                      asChild
+                      className="hover:bg-orange-500/10 hover:text-orange-400 cursor-pointer py-2.5"
+                    >
+                      <Link href="/admin">
+                        <LayoutDashboard className="mr-2 h-4 w-4" /> Panel de
+                        Control
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
 
                 <DropdownMenuSeparator className="bg-zinc-800" />
 
                 <DropdownMenuItem
                   onClick={handleLogout}
-                  className="text-red-500 hover:bg-red-950/30 cursor-pointer"
+                  className="text-red-400 hover:bg-red-500/10 hover:text-red-300 cursor-pointer py-2.5"
                 >
                   <LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            // --- USUARIO NO LOGUEADO ---
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Link href="/login">
                 <Button
                   variant="ghost"
-                  className="text-zinc-300 hover:text-white hover:bg-white/10 hidden sm:inline-flex"
+                  className="text-zinc-400 hover:text-white hover:bg-zinc-800 hidden sm:inline-flex font-medium"
                 >
                   Iniciar Sesión
                 </Button>
               </Link>
               <Link href="/reservar">
-                <Button className="bg-orange-600 text-white hover:bg-orange-700">
-                  Reservar
+                <Button className="bg-orange-600 text-white hover:bg-orange-700 font-bold shadow-lg shadow-orange-500/20">
+                  Agendar Cita
                 </Button>
               </Link>
             </div>

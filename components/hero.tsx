@@ -26,8 +26,9 @@ export function Hero() {
               </h1>
 
               <p className="max-w-[600px] text-zinc-400 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed mx-auto lg:mx-0">
-                Servicio profesional de detallado automotriz a domicilio. Agenda
-                tu cita en línea y recupera el brillo de agencia hoy mismo.
+                Servicio profesional de detallado automotriz a domicilio.
+                Nosotros llevamos el equipo, tú solo pon el agua y la luz.
+                Agenda en menos de 2 minutos.
               </p>
             </div>
 
@@ -38,16 +39,16 @@ export function Hero() {
                 ni esperas
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-orange-500" /> Productos
+                <CheckCircle2 className="h-4 w-4 text-orange-500" /> Químicos
                 Premium
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-orange-500" /> Técnicos
-                Certificados
+                <CheckCircle2 className="h-4 w-4 text-orange-500" /> Nosotros
+                llevamos el equipo
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-orange-500" /> Garantía de
-                satisfacción
+                <CheckCircle2 className="h-4 w-4 text-orange-500" /> Obsesión
+                por los detalles
               </li>
             </ul>
 
@@ -62,19 +63,22 @@ export function Hero() {
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
-              <Button
-                size="lg"
-                variant="outline"
-                className="text-white border-zinc-700 hover:bg-zinc-800 hover:text-white"
-              >
-                Ver Nuestros Trabajos
-              </Button>
+
+              {/* ✅ NUEVO: Botón de anclaje hacia la sección de precios */}
+              <Link href="#precios">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="text-white border-zinc-700 hover:bg-zinc-800 hover:text-white w-full sm:w-auto"
+                >
+                  Ver Precios
+                </Button>
+              </Link>
             </div>
           </div>
 
           {/* COLUMNA DERECHA: Imagen Hero */}
           <div className="relative mx-auto w-full max-w-[500px] lg:max-w-none">
-            {/* Efecto de brillo detrás de la imagen (Glow) */}
             <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 opacity-30 blur-2xl"></div>
 
             <div className="relative aspect-video overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl">
