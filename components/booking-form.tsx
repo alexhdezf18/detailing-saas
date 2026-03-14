@@ -35,9 +35,8 @@ import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { WeatherWidget } from "@/components/weather-widget";
+import { Checkbox } from "@/components/ui/checkbox";
 
-// --- CONFIGURACIÓN ---
-// Tus horarios estándar de trabajo
 const DEFAULT_TIME_SLOTS = [
   "09:00 AM",
   "11:00 AM",
@@ -58,6 +57,7 @@ const CODIGOS_POSTALES_DEMO: Record<string, string> = {
 
 const BUSINESS_PHONE = "6142730355";
 
+// 1. ZOD SCHEMA: Agregamos campos opcionales para la entrada manual
 const formSchema = z.object({
   name: z.string().min(2, { message: "Requerido" }),
   phone: z.string().min(10, { message: "10 dígitos requeridos" }),
@@ -70,6 +70,11 @@ const formSchema = z.object({
   address_street: z.string().min(1),
   address_number: z.string().min(1),
   referral_code: z.string().optional(),
+  vehicle_make: z.string().min(1, { message: "Requerido" }),
+  custom_make: z.string().optional(), // Campo manual para marca
+  vehicle_model: z.string().min(1, { message: "Requerido" }),
+  custom_model: z.string().optional(), // Campo manual para modelo
+  trunk_vacuum: z.boolean(),
 });
 
 export function BookingForm() {
@@ -77,6 +82,8 @@ export function BookingForm() {
   const [availableSlots, setAvailableSlots] =
     useState<string[]>(DEFAULT_TIME_SLOTS);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [modelosDisponibles, setModelosDisponibles] = useState<string[]>([]);
+  const [cargandoModelos, setCargandoModelos] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -89,10 +96,19 @@ export function BookingForm() {
       address_street: "",
       address_number: "",
       referral_code: "",
+      vehicle_make: "",
+      custom_make: "",
+      vehicle_model: "",
+      custom_model: "",
+      trunk_vacuum: false,
     },
   });
 
   const zipCode = form.watch("address_zip");
+  const selectedDate = form.watch("booking_date");
+  const selectedMake = form.watch("vehicle_make");
+  const selectedModel = form.watch("vehicle_model");
+
   useEffect(() => {
     if (zipCode && zipCode.length === 5) {
       const colonia = CODIGOS_POSTALES_DEMO[zipCode];
@@ -100,14 +116,48 @@ export function BookingForm() {
     }
   }, [zipCode, form]);
 
-  const selectedDate = form.watch("booking_date");
+  // Lógica de API modificada: Si elige "Otro", no llamamos a la API
+  useEffect(() => {
+    async function fetchModels() {
+      if (!selectedMake) {
+        setModelosDisponibles([]);
+        return;
+      }
 
+      // Si selecciona "Otro", limpiamos modelos, pre-seleccionamos "Otro" en modelo y salimos
+      if (selectedMake === "Otro") {
+        setModelosDisponibles([]);
+        form.setValue("vehicle_model", "Otro");
+        return;
+      }
+
+      setCargandoModelos(true);
+      form.setValue("vehicle_model", "");
+      form.setValue("custom_model", ""); // Limpiamos el input manual por si acaso
+
+      try {
+        const res = await fetch(
+          `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${selectedMake}?format=json`,
+        );
+        const data = await res.json();
+        const models = data.Results.map((item: any) => item.Model_Name).sort();
+        setModelosDisponibles(models);
+      } catch (error) {
+        console.error("Error cargando modelos:", error);
+        toast.error("No se pudieron cargar los modelos");
+      } finally {
+        setCargandoModelos(false);
+      }
+    }
+
+    fetchModels();
+  }, [selectedMake, form]);
+
+  // ... (El useEffect de fetchDisponibilidad de Supabase/Google queda exactamente igual) ...
   useEffect(() => {
     async function fetchDisponibilidad() {
       if (!selectedDate) return;
-
       setIsLoadingSlots(true);
-
       const startOfDay = new Date(selectedDate);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(selectedDate);
@@ -124,19 +174,15 @@ export function BookingForm() {
         const takenTimes = takenBookings
           ? takenBookings.map((b) => b.booking_time)
           : [];
-
         const googleRes = await checkAvailability(startOfDay.toISOString());
         const googleEvents = googleRes.busySlots || [];
 
         const freeSlots = DEFAULT_TIME_SLOTS.filter((slot) => {
           if (takenTimes.includes(slot)) return false;
-
           const [time, period] = slot.split(" ");
           let [hours, minutes] = time.split(":").map(Number);
-
           if (period === "PM" && hours !== 12) hours += 12;
           if (period === "AM" && hours === 12) hours = 0;
-
           const slotStart = new Date(selectedDate);
           slotStart.setHours(hours, minutes, 0, 0);
           const slotEnd = new Date(slotStart.getTime() + 2 * 60 * 60 * 1000);
@@ -145,10 +191,8 @@ export function BookingForm() {
             if (!evento.start || !evento.end) return false;
             const eventoInicio = new Date(evento.start);
             const eventoFin = new Date(evento.end);
-
             return slotStart < eventoFin && slotEnd > eventoInicio;
           });
-
           return !chocaConGoogle;
         });
 
@@ -160,16 +204,27 @@ export function BookingForm() {
         setIsLoadingSlots(false);
       }
     }
-
     fetchDisponibilidad();
   }, [selectedDate]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
 
+    // INTERCEPCIÓN DE PAYLOAD: Si seleccionó "Otro", usamos el texto manual
+    const finalMake =
+      values.vehicle_make === "Otro"
+        ? values.custom_make || "No especificado"
+        : values.vehicle_make;
+    const finalModel =
+      values.vehicle_model === "Otro"
+        ? values.custom_model || "No especificado"
+        : values.vehicle_model;
+
     try {
       const result = await createBooking({
         ...values,
+        vehicle_make: finalMake, // Sobreescribimos con la marca final
+        vehicle_model: finalModel, // Sobreescribimos con el modelo final
         booking_date: values.booking_date.toISOString(),
       });
 
@@ -178,9 +233,10 @@ export function BookingForm() {
       const fechaFormato = format(values.booking_date, "EEEE d 'de' MMMM", {
         locale: es,
       });
+      const trunkText = values.trunk_vacuum ? " (con aspirada de cajuela)" : "";
 
       const whatsappUrl = `https://wa.me/${BUSINESS_PHONE}?text=${encodeURIComponent(
-        `Hola, quiero confirmar mi reserva para el ${fechaFormato} a las ${values.booking_time}.`,
+        `Hola, quiero agendar un ${values.service_type} para mi ${finalMake} ${finalModel}${trunkText}. La fecha sería el ${fechaFormato} a las ${values.booking_time}. ¿Me confirmas la disponibilidad y el costo total?`,
       )}`;
 
       toast.success("¡Reserva Agendada!", {
@@ -201,47 +257,44 @@ export function BookingForm() {
       setIsSubmitting(false);
     }
   }
+
   return (
-    <div className="w-full max-w-2xl mx-auto p-6 bg-zinc-900/50 backdrop-blur-lg rounded-xl border border-zinc-800 shadow-2xl">
+    <div className="w-full max-w-xl mx-auto p-6 md:p-8 bg-zinc-900/50 backdrop-blur-lg rounded-xl border border-zinc-800 shadow-2xl">
       <div className="mb-6 text-center">
         <h3 className="text-2xl font-bold text-white">Reserva Inteligente</h3>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* ... (Secciones de Contacto y Dirección se mantienen igual) ... */}
-          {/* SOLO PONDRÉ AQUÍ LA SECCIÓN DE CITA QUE CAMBIÓ VISUALMENTE */}
-
+          {/* ==================== 1. PAQUETE Y VEHÍCULO ==================== */}
           <div className="space-y-4 pt-2 border-t border-zinc-800">
             <h4 className="text-sm font-semibold text-orange-500 uppercase">
-              Detalles de la Cita
+              1. Paquete y Vehículo
             </h4>
 
-            {/* SERVICIO (Igual que antes) */}
             <FormField
               control={form.control}
               name="service_type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-zinc-300">Paquete</FormLabel>
+                  <FormLabel className="text-zinc-300">
+                    Tipo de Lavado
+                  </FormLabel>
                   <Select
                     onValueChange={field.onChange}
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger className="bg-zinc-950 border-zinc-800">
-                        <SelectValue placeholder="Selecciona..." />
+                      <SelectTrigger className="bg-zinc-950 border-zinc-800 h-14">
+                        <SelectValue placeholder="Selecciona un paquete..." />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                      <SelectItem value="Lavado Express">
-                        Lavado Express ($350)
+                      <SelectItem value="FAST MODE">
+                        Fast Mode (Mantenimiento)
                       </SelectItem>
-                      <SelectItem value="Detallado Premium">
-                        Detallado Premium ($950)
-                      </SelectItem>
-                      <SelectItem value="Cerámico Total">
-                        Cerámico Total ($2,500)
+                      <SelectItem value="DETAILING MODE">
+                        Detailing Mode (Profundo)
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -250,8 +303,176 @@ export function BookingForm() {
               )}
             />
 
-            <div className="grid md:grid-cols-2 gap-4">
-              {/* CALENDARIO */}
+            {/* MARCA */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <FormField
+                  control={form.control}
+                  name="vehicle_make"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-300">Marca</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                            <SelectValue placeholder="Ej. Toyota" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-zinc-900 border-zinc-800 text-white max-h-48">
+                          {[
+                            "Audi",
+                            "BMW",
+                            "Chevrolet",
+                            "Dodge",
+                            "Ford",
+                            "GMC",
+                            "Honda",
+                            "Hyundai",
+                            "Jeep",
+                            "Kia",
+                            "Mazda",
+                            "Mercedes-Benz",
+                            "Nissan",
+                            "Peugeot",
+                            "Renault",
+                            "Suzuki",
+                            "Toyota",
+                            "Volkswagen",
+                          ].map((make) => (
+                            <SelectItem key={make} value={make}>
+                              {make}
+                            </SelectItem>
+                          ))}
+                          <SelectItem
+                            value="Otro"
+                            className="text-orange-400 font-bold"
+                          >
+                            Otra marca...
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {/* RENDERIZADO CONDICIONAL: Input manual de Marca */}
+                {selectedMake === "Otro" && (
+                  <FormField
+                    control={form.control}
+                    name="custom_make"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            placeholder="Escribe la marca"
+                            {...field}
+                            className="bg-zinc-950 border-orange-500/50"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
+
+              {/* MODELO */}
+              <div className="space-y-2">
+                <FormField
+                  control={form.control}
+                  name="vehicle_model"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-300">
+                        Modelo{" "}
+                        {cargandoModelos && (
+                          <Loader2 className="inline h-3 w-3 animate-spin text-orange-500" />
+                        )}
+                      </FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={!selectedMake || cargandoModelos}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                            <SelectValue
+                              placeholder={
+                                selectedMake ? "Modelo..." : "Elige marca"
+                              }
+                            />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-zinc-900 border-zinc-800 text-white max-h-48">
+                          {modelosDisponibles.map((model, index) => (
+                            <SelectItem key={`${model}-${index}`} value={model}>
+                              {model}
+                            </SelectItem>
+                          ))}
+                          {selectedMake && (
+                            <SelectItem
+                              value="Otro"
+                              className="text-orange-400 font-bold"
+                            >
+                              Otro modelo...
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {/* RENDERIZADO CONDICIONAL: Input manual de Modelo */}
+                {selectedModel === "Otro" && (
+                  <FormField
+                    control={form.control}
+                    name="custom_model"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            placeholder="Escribe el modelo"
+                            {...field}
+                            className="bg-zinc-950 border-orange-500/50"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* CHECKBOX CAJUELA */}
+            <FormField
+              control={form.control}
+              name="trunk_vacuum"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-zinc-800 p-4 bg-zinc-950">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      className="border-zinc-700 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel className="text-zinc-300">
+                      Aspirada de cajuela (+ $30 MXN)
+                    </FormLabel>
+                    <p className="text-xs text-zinc-500">
+                      Limpieza a detalle del maletero.
+                    </p>
+                  </div>
+                </FormItem>
+              )}
+            />
+
+            {/* FECHA Y HORA */}
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="booking_date"
@@ -300,7 +521,6 @@ export function BookingForm() {
                 )}
               />
 
-              {/* HORA INTELIGENTE */}
               <FormField
                 control={form.control}
                 name="booking_time"
@@ -310,7 +530,7 @@ export function BookingForm() {
                       Hora{" "}
                       {isLoadingSlots && (
                         <span className="text-orange-500 text-xs ml-2">
-                          (Buscando...)
+                          (...)
                         </span>
                       )}
                     </FormLabel>
@@ -323,9 +543,7 @@ export function BookingForm() {
                         <SelectTrigger className="bg-zinc-950 border-zinc-800">
                           <SelectValue
                             placeholder={
-                              selectedDate
-                                ? "Ver horarios"
-                                : "Primero elige fecha"
+                              selectedDate ? "Horarios" : "Elige fecha"
                             }
                           />
                         </SelectTrigger>
@@ -351,13 +569,12 @@ export function BookingForm() {
             </div>
           </div>
 
-          {/* RESTO DEL FORMULARIO OCULTO PARA BREVEDAD (NOMBRE, DIRECCIÓN) - DEBES MANTENERLO */}
-          {/* Asegúrate de pegar las secciones de "Tus Datos" y "Ubicación" que ya tenías aquí antes del botón */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-semibold text-orange-500 uppercase tracking-wider">
-              1. Tus Datos
+          {/* ==================== 2. TUS DATOS ==================== */}
+          <div className="space-y-4 pt-4 border-t border-zinc-800">
+            <h4 className="text-sm font-semibold text-orange-500 uppercase">
+              2. Tus Datos
             </h4>
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -406,9 +623,10 @@ export function BookingForm() {
             />
           </div>
 
-          <div className="space-y-4 pt-2">
-            <h4 className="text-sm font-semibold text-orange-500 uppercase tracking-wider flex items-center gap-2">
-              <MapPin className="h-4 w-4" /> 2. Ubicación del Vehículo
+          {/* ==================== 3. UBICACIÓN DEL VEHÍCULO ==================== */}
+          <div className="space-y-4 pt-4 border-t border-zinc-800">
+            <h4 className="text-sm font-semibold text-orange-500 uppercase flex items-center gap-2">
+              <MapPin className="h-4 w-4" /> 3. Ubicación
             </h4>
             <div className="grid grid-cols-3 gap-4">
               <FormField
@@ -419,7 +637,7 @@ export function BookingForm() {
                     <FormLabel className="text-zinc-300">C.P.</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="31..."
+                        placeholder="31000"
                         maxLength={5}
                         {...field}
                         className="bg-zinc-950 border-zinc-800 text-white font-mono"
@@ -484,7 +702,9 @@ export function BookingForm() {
               />
             </div>
           </div>
-          <div className="space-y-4 pt-4 border-t border-zinc-800">
+
+          {/* ==================== REFERIDO Y SUBMIT ==================== */}
+          <div className="pt-4 border-t border-zinc-800">
             <FormField
               control={form.control}
               name="referral_code"
@@ -500,18 +720,15 @@ export function BookingForm() {
                       className="bg-zinc-950 border-zinc-800 text-orange-400 font-mono uppercase placeholder:normal-case"
                     />
                   </FormControl>
-                  <p className="text-xs text-zinc-500">
-                    Si un amigo te invitó, ingresa su código para ayudarlo a
-                    ganar un lavado gratis.
-                  </p>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
+
           <Button
             type="submit"
-            className="w-full bg-orange-600 hover:bg-orange-700 font-bold py-6 text-lg"
+            className="w-full bg-orange-600 hover:bg-orange-700 font-bold py-6 text-lg mt-6"
             disabled={isSubmitting}
           >
             {isSubmitting ? "Procesando..." : "Confirmar en WhatsApp"}

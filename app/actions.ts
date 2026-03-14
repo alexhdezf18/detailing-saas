@@ -56,10 +56,13 @@ export async function createBooking(formData: any) {
     address_colonia,
     address_street,
     address_number,
-    referral_code, // <--- NUEVO: Recibimos el código
+    referral_code,
+    vehicle_make,
+    vehicle_model,
+    vehicle_size,
+    total_price,
   } = formData;
 
-  // 1. Guardar Reserva en Supabase
   const { error: dbError } = await supabase.from("bookings").insert([
     {
       name,
@@ -74,7 +77,10 @@ export async function createBooking(formData: any) {
       address_number,
       address_city: "Chihuahua, CHIH",
       status: "pending",
-      referral_code: referral_code ? referral_code.toUpperCase() : null, // <--- Lo guardamos en mayúsculas
+      referral_code: referral_code ? referral_code.toUpperCase() : null,
+      vehicle_make,
+      vehicle_model,
+      total_price,
     },
   ]);
 
@@ -125,6 +131,8 @@ export async function createBooking(formData: any) {
         <p><strong>Código de Referido usado:</strong> ${referral_code || "Ninguno"}</p>
         <hr />
         <p><strong>Dirección:</strong> ${address_street} ${address_number}, ${address_colonia}</p>
+        <p><strong>Vehículo:</strong> ${vehicle_make} ${vehicle_model} (${vehicle_size})</p>
+        <p><strong>Total a Pagar:</strong> $${total_price} MXN</p>
         <br />
         <a href="${calendarLink}" style="background-color: #ea580c; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
           📅 Agregar a mi Google Calendar
