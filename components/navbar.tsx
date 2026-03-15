@@ -20,6 +20,7 @@ import {
   LogOut,
   LayoutDashboard,
   CalendarCheck,
+  Menu,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 
@@ -67,7 +68,6 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-black/60 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
-        {/* ==================== LOGO Y MARCA ==================== */}
         <Link
           className="flex items-center gap-3 font-extrabold text-xl text-white tracking-tight group"
           href="/"
@@ -90,7 +90,6 @@ export function Navbar() {
           </div>
         </Link>
 
-        {/* ==================== NAVEGACIÓN ==================== */}
         <nav className="hidden gap-8 md:flex items-center">
           <Link
             className="text-sm font-medium text-zinc-400 transition-colors hover:text-orange-500 cursor-pointer"
@@ -107,8 +106,7 @@ export function Navbar() {
           </Link>
         </nav>
 
-        {/* ==================== SESIÓN ==================== */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -189,22 +187,75 @@ export function Navbar() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="flex items-center gap-3">
-              <Link href="/login">
+            /* --- BOTONES PARA INVITADOS --- */
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Link href="/login" className="hidden sm:block">
                 <Button
                   variant="ghost"
-                  className="text-zinc-400 hover:text-white hover:bg-zinc-800 hidden sm:inline-flex font-medium"
+                  className="text-zinc-400 hover:text-white hover:bg-zinc-800 font-medium"
                 >
                   Iniciar Sesión
                 </Button>
               </Link>
               <Link href="/reservar">
-                <Button className="bg-orange-600 text-white hover:bg-orange-700 font-bold shadow-lg shadow-orange-500/20">
+                <Button className="bg-orange-600 text-white hover:bg-orange-700 font-bold shadow-lg shadow-orange-500/20 px-3 sm:px-4 text-sm sm:text-base">
                   Agendar Cita
                 </Button>
               </Link>
             </div>
           )}
+
+          {/* ==================== MENÚ HAMBURGUESA (MÓVIL) ==================== */}
+          <div className="md:hidden flex items-center">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-zinc-400 hover:text-white"
+                >
+                  <Menu className="h-6 w-6" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-56 bg-zinc-900 border-zinc-800 text-white mt-2"
+              >
+                <DropdownMenuItem
+                  asChild
+                  className="hover:bg-zinc-800 cursor-pointer py-3"
+                >
+                  <Link href="/#precios" onClick={handleScrollToPrecios}>
+                    Precios
+                  </Link>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  asChild
+                  className="hover:bg-zinc-800 cursor-pointer py-3"
+                >
+                  <Link href="/reservar">Reservar</Link>
+                </DropdownMenuItem>
+
+                {!user && (
+                  <>
+                    <DropdownMenuSeparator className="bg-zinc-800" />
+                    <DropdownMenuItem
+                      asChild
+                      className="hover:bg-zinc-800 cursor-pointer py-3"
+                    >
+                      <Link
+                        href="/login"
+                        className="text-orange-400 font-medium w-full"
+                      >
+                        Iniciar Sesión
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
     </header>

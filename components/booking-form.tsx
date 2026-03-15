@@ -37,13 +37,33 @@ import { toast } from "sonner";
 import { WeatherWidget } from "@/components/weather-widget";
 import { Checkbox } from "@/components/ui/checkbox";
 
-const DEFAULT_TIME_SLOTS = [
+// Todas las horas operativas posibles de Papotico's Wash
+const TODAS_LAS_HORAS = [
+  "07:00 AM",
+  "08:00 AM",
   "09:00 AM",
+  "10:00 AM",
   "11:00 AM",
+  "12:00 PM",
   "01:00 PM",
+  "02:00 PM",
   "03:00 PM",
+  "04:00 PM",
   "05:00 PM",
+  "06:00 PM",
+  "07:00 PM",
+  "08:00 PM",
 ];
+
+const HORARIO_BASE: Record<number, string[]> = {
+  0: [],
+  1: ["03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM"],
+  2: ["03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM"],
+  3: ["03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM"],
+  4: ["03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM"],
+  5: ["03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM"],
+  6: ["09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM", "02:00 PM"],
+};
 
 const CODIGOS_POSTALES_DEMO: Record<string, string> = {
   "31000": "Colonia Centro",
@@ -81,8 +101,7 @@ const formSchema = z.object({
 
 export function BookingForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [availableSlots, setAvailableSlots] =
-    useState<string[]>(DEFAULT_TIME_SLOTS);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [modelosDisponibles, setModelosDisponibles] = useState<string[]>([]);
   const [cargandoModelos, setCargandoModelos] = useState(false);
@@ -111,6 +130,7 @@ export function BookingForm() {
   const selectedDate = form.watch("booking_date");
   const selectedMake = form.watch("vehicle_make");
   const selectedModel = form.watch("vehicle_model");
+  const selectedService = form.watch("service_type");
 
   useEffect(() => {
     if (zipCode && zipCode.length === 5) {
@@ -125,13 +145,11 @@ export function BookingForm() {
         setModelosDisponibles([]);
         return;
       }
-
       if (selectedMake === "Otro") {
         setModelosDisponibles([]);
         form.setValue("vehicle_model", "Otro");
         return;
       }
-
       setCargandoModelos(true);
       form.setValue("vehicle_model", "");
       form.setValue("custom_model", "");
@@ -145,19 +163,25 @@ export function BookingForm() {
         setModelosDisponibles(models);
       } catch (error) {
         console.error("Error cargando modelos:", error);
-        toast.error("No se pudieron cargar los modelos");
       } finally {
         setCargandoModelos(false);
       }
     }
-
     fetchModels();
   }, [selectedMake, form]);
 
   useEffect(() => {
     async function fetchDisponibilidad() {
-      if (!selectedDate) return;
+      if (!selectedDate || !selectedService) {
+        setAvailableSlots([]);
+        return;
+      }
       setIsLoadingSlots(true);
+
+      const dayOfWeek = selectedDate.getDay();
+      // Inicializamos con el horario base de ese día
+      let horasAbiertas = [...HORARIO_BASE[dayOfWeek]];
+
       const startOfDay = new Date(selectedDate);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(selectedDate);
@@ -166,50 +190,118 @@ export function BookingForm() {
       try {
         const { data: takenBookings } = await supabase
           .from("bookings")
-          .select("booking_time")
+          .select("booking_time, service_type, status")
           .gte("booking_date", startOfDay.toISOString())
           .lte("booking_date", endOfDay.toISOString())
           .neq("status", "cancelled");
 
-        const takenTimes = takenBookings
-          ? takenBookings.map((b) => b.booking_time)
-          : [];
+        let dbBlockedSlots: string[] = [];
+
+        if (takenBookings) {
+          takenBookings.forEach((booking) => {
+            // EXCEPCIÓN: Si el Admin desbloqueó esta hora manualmente, la agregamos al pool de horas abiertas
+            if (booking.status === "unlocked") {
+              if (!horasAbiertas.includes(booking.booking_time)) {
+                horasAbiertas.push(booking.booking_time);
+              }
+              return;
+            }
+
+            // LÓGICA DE BLOQUEO Y EXPANSIÓN
+            const startIndex = TODAS_LAS_HORAS.indexOf(booking.booking_time);
+            if (startIndex === -1) return;
+
+            let slotsNeeded = 1;
+            if (booking.service_type === "FAST MODE") slotsNeeded = 2;
+            if (booking.service_type === "DETAILING MODE") slotsNeeded = 3;
+            if (booking.status === "blocked") slotsNeeded = 1; // Bloqueo manual del Admin
+
+            for (let i = 0; i < slotsNeeded; i++) {
+              if (TODAS_LAS_HORAS[startIndex + i]) {
+                dbBlockedSlots.push(TODAS_LAS_HORAS[startIndex + i]);
+              }
+            }
+          });
+        }
+
+        // Ordenamos las horas abiertas cronológicamente para que no se revuelvan en la UI
+        horasAbiertas.sort(
+          (a, b) => TODAS_LAS_HORAS.indexOf(a) - TODAS_LAS_HORAS.indexOf(b),
+        );
+
         const googleRes = await checkAvailability(startOfDay.toISOString());
         const googleEvents = googleRes.busySlots || [];
 
-        const freeSlots = DEFAULT_TIME_SLOTS.filter((slot) => {
-          if (takenTimes.includes(slot)) return false;
+        // Filtramos el pool final
+        const freeSlots = horasAbiertas.filter((slot) => {
+          if (dbBlockedSlots.includes(slot)) return false;
+
           const [time, period] = slot.split(" ");
           let [hours, minutes] = time.split(":").map(Number);
           if (period === "PM" && hours !== 12) hours += 12;
           if (period === "AM" && hours === 12) hours = 0;
+
           const slotStart = new Date(selectedDate);
           slotStart.setHours(hours, minutes, 0, 0);
-          const slotEnd = new Date(slotStart.getTime() + 2 * 60 * 60 * 1000);
 
+          // BUFFER DE 2 HORAS
+          const now = new Date();
+          if (selectedDate.toDateString() === now.toDateString()) {
+            const twoHoursFromNow = new Date(
+              now.getTime() + 2 * 60 * 60 * 1000,
+            );
+            if (slotStart <= twoHoursFromNow) return false;
+          }
+
+          // ¿CABE EL SERVICIO?
+          const startIndex = TODAS_LAS_HORAS.indexOf(slot);
+          let mySlotsNeeded = 1;
+          if (selectedService === "FAST MODE") mySlotsNeeded = 2;
+          if (selectedService === "DETAILING MODE") mySlotsNeeded = 3;
+
+          for (let i = 0; i < mySlotsNeeded; i++) {
+            const futureSlot = TODAS_LAS_HORAS[startIndex + i];
+            // Falla si la hora no existe, si está bloqueada por DB, o si la hora NO está habilitada en el horario
+            if (
+              !futureSlot ||
+              dbBlockedSlots.includes(futureSlot) ||
+              !horasAbiertas.includes(futureSlot)
+            ) {
+              return false;
+            }
+          }
+
+          // GOOGLE CALENDAR
+          const slotEnd = new Date(
+            slotStart.getTime() + mySlotsNeeded * 60 * 60 * 1000,
+          );
           const chocaConGoogle = googleEvents.some((evento: any) => {
             if (!evento.start || !evento.end) return false;
             const eventoInicio = new Date(evento.start);
             const eventoFin = new Date(evento.end);
             return slotStart < eventoFin && slotEnd > eventoInicio;
           });
+
           return !chocaConGoogle;
         });
 
         setAvailableSlots(freeSlots);
       } catch (error) {
         console.error("Error validando disponibilidad:", error);
-        setAvailableSlots(DEFAULT_TIME_SLOTS);
+        setAvailableSlots([]);
       } finally {
         setIsLoadingSlots(false);
       }
     }
-    fetchDisponibilidad();
-  }, [selectedDate]);
+
+    if (selectedService && selectedDate) {
+      form.setValue("booking_time", "");
+      fetchDisponibilidad();
+    }
+  }, [selectedDate, selectedService, form]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
-
     const finalMake =
       values.vehicle_make === "Otro"
         ? values.custom_make || "No especificado"
@@ -233,7 +325,6 @@ export function BookingForm() {
         locale: es,
       });
       const trunkText = values.trunk_vacuum ? " (con aspirada de cajuela)" : "";
-
       const whatsappUrl = `https://wa.me/${BUSINESS_PHONE}?text=${encodeURIComponent(
         `Hola, quiero agendar un ${values.service_type} para mi ${finalMake} ${finalModel}${trunkText}. La fecha sería el ${fechaFormato} a las ${values.booking_time}. ¿Me confirmas la disponibilidad y el costo total?`,
       )}`;
@@ -248,7 +339,6 @@ export function BookingForm() {
         form.reset();
       }, 2000);
     } catch (error: any) {
-      console.error(error);
       toast.error("Hubo un error", {
         description: error.message || "No se pudo conectar con el servidor.",
       });
@@ -265,7 +355,6 @@ export function BookingForm() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* ==================== 1. PAQUETE Y VEHÍCULO ==================== */}
           <div className="space-y-4 pt-2 border-t border-zinc-800">
             <h4 className="text-sm font-semibold text-orange-500 uppercase">
               1. Paquete y Vehículo
@@ -284,7 +373,7 @@ export function BookingForm() {
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger className="bg-zinc-950 border-zinc-800 h-14">
+                      <SelectTrigger className="bg-zinc-950 border-zinc-800 h-14 text-white">
                         <SelectValue placeholder="Selecciona un paquete..." />
                       </SelectTrigger>
                     </FormControl>
@@ -302,7 +391,6 @@ export function BookingForm() {
               )}
             />
 
-            {/* MARCA */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <FormField
@@ -316,7 +404,7 @@ export function BookingForm() {
                         defaultValue={field.value}
                       >
                         <FormControl>
-                          <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                          <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
                             <SelectValue placeholder="Ej. Toyota" />
                           </SelectTrigger>
                         </FormControl>
@@ -357,7 +445,6 @@ export function BookingForm() {
                     </FormItem>
                   )}
                 />
-                {/* RENDERIZADO CONDICIONAL: Input manual de Marca */}
                 {selectedMake === "Otro" && (
                   <FormField
                     control={form.control}
@@ -368,7 +455,7 @@ export function BookingForm() {
                           <Input
                             placeholder="Escribe la marca"
                             {...field}
-                            className="bg-zinc-950 border-orange-500/50"
+                            className="bg-zinc-950 border-orange-500/50 text-white"
                           />
                         </FormControl>
                       </FormItem>
@@ -377,7 +464,6 @@ export function BookingForm() {
                 )}
               </div>
 
-              {/* MODELO */}
               <div className="space-y-2">
                 <FormField
                   control={form.control}
@@ -396,7 +482,7 @@ export function BookingForm() {
                         disabled={!selectedMake || cargandoModelos}
                       >
                         <FormControl>
-                          <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                          <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
                             <SelectValue
                               placeholder={
                                 selectedMake ? "Modelo..." : "Elige marca"
@@ -424,7 +510,6 @@ export function BookingForm() {
                     </FormItem>
                   )}
                 />
-                {/* RENDERIZADO CONDICIONAL: Input manual de Modelo */}
                 {selectedModel === "Otro" && (
                   <FormField
                     control={form.control}
@@ -435,7 +520,7 @@ export function BookingForm() {
                           <Input
                             placeholder="Escribe el modelo"
                             {...field}
-                            className="bg-zinc-950 border-orange-500/50"
+                            className="bg-zinc-950 border-orange-500/50 text-white"
                           />
                         </FormControl>
                       </FormItem>
@@ -445,7 +530,6 @@ export function BookingForm() {
               </div>
             </div>
 
-            {/* CHECKBOX CAJUELA */}
             <FormField
               control={form.control}
               name="trunk_vacuum"
@@ -470,7 +554,6 @@ export function BookingForm() {
               )}
             />
 
-            {/* FECHA Y HORA */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -508,7 +591,11 @@ export function BookingForm() {
                             field.onChange(date);
                             form.setValue("booking_time", "");
                           }}
-                          disabled={(date) => date < new Date()}
+                          disabled={(date) => {
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            return date < today;
+                          }}
                           initialFocus
                           className="text-white"
                         />
@@ -536,13 +623,19 @@ export function BookingForm() {
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
-                      disabled={!selectedDate || isLoadingSlots}
+                      disabled={
+                        !selectedDate || !selectedService || isLoadingSlots
+                      }
                     >
                       <FormControl>
-                        <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                        <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
                           <SelectValue
                             placeholder={
-                              selectedDate ? "Horarios" : "Elige fecha"
+                              !selectedService
+                                ? "Elige paquete"
+                                : !selectedDate
+                                  ? "Elige fecha"
+                                  : "Horarios"
                             }
                           />
                         </SelectTrigger>
@@ -556,7 +649,9 @@ export function BookingForm() {
                           ))
                         ) : (
                           <div className="p-2 text-sm text-zinc-500 text-center">
-                            ¡Día lleno!
+                            {selectedDate && selectedService
+                              ? "¡Día lleno!"
+                              : "Completa los pasos"}
                           </div>
                         )}
                       </SelectContent>
@@ -568,7 +663,6 @@ export function BookingForm() {
             </div>
           </div>
 
-          {/* ==================== 2. TUS DATOS ==================== */}
           <div className="space-y-4 pt-4 border-t border-zinc-800">
             <h4 className="text-sm font-semibold text-orange-500 uppercase">
               2. Tus Datos
@@ -583,7 +677,7 @@ export function BookingForm() {
                     <FormControl>
                       <Input
                         {...field}
-                        className="bg-zinc-950 border-zinc-800"
+                        className="bg-zinc-950 border-zinc-800 text-white"
                       />
                     </FormControl>
                     <FormMessage />
@@ -599,7 +693,7 @@ export function BookingForm() {
                     <FormControl>
                       <Input
                         {...field}
-                        className="bg-zinc-950 border-zinc-800"
+                        className="bg-zinc-950 border-zinc-800 text-white"
                       />
                     </FormControl>
                     <FormMessage />
@@ -614,7 +708,10 @@ export function BookingForm() {
                 <FormItem>
                   <FormLabel className="text-zinc-300">Email</FormLabel>
                   <FormControl>
-                    <Input {...field} className="bg-zinc-950 border-zinc-800" />
+                    <Input
+                      {...field}
+                      className="bg-zinc-950 border-zinc-800 text-white"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -622,7 +719,6 @@ export function BookingForm() {
             />
           </div>
 
-          {/* ==================== 3. UBICACIÓN DEL VEHÍCULO ==================== */}
           <div className="space-y-4 pt-4 border-t border-zinc-800">
             <h4 className="text-sm font-semibold text-orange-500 uppercase flex items-center gap-2">
               <MapPin className="h-4 w-4" /> 3. Ubicación
@@ -656,7 +752,7 @@ export function BookingForm() {
                       <Input
                         placeholder="Ej. Centro"
                         {...field}
-                        className="bg-zinc-950 border-zinc-800"
+                        className="bg-zinc-950 border-zinc-800 text-white"
                       />
                     </FormControl>
                     <FormMessage />
@@ -675,7 +771,7 @@ export function BookingForm() {
                       <Input
                         placeholder="Av. Universidad"
                         {...field}
-                        className="bg-zinc-950 border-zinc-800"
+                        className="bg-zinc-950 border-zinc-800 text-white"
                       />
                     </FormControl>
                     <FormMessage />
@@ -692,7 +788,7 @@ export function BookingForm() {
                       <Input
                         placeholder="#123"
                         {...field}
-                        className="bg-zinc-950 border-zinc-800"
+                        className="bg-zinc-950 border-zinc-800 text-white"
                       />
                     </FormControl>
                     <FormMessage />
@@ -702,7 +798,6 @@ export function BookingForm() {
             </div>
           </div>
 
-          {/* ==================== REFERIDO Y SUBMIT ==================== */}
           <div className="pt-4 border-t border-zinc-800">
             <FormField
               control={form.control}
@@ -724,7 +819,7 @@ export function BookingForm() {
               )}
             />
           </div>
-          {/* ==================== REQUISITOS DEL SERVICIO ==================== */}
+
           <div className="pt-4 border-t border-zinc-800">
             <FormField
               control={form.control}
@@ -740,13 +835,13 @@ export function BookingForm() {
                   </FormControl>
                   <div className="space-y-1 leading-none">
                     <FormLabel className="text-orange-400 font-semibold text-sm">
-                      Requisitos indispensables del servicio a domicilio
+                      Requisitos indispensables
                     </FormLabel>
                     <p className="text-xs text-zinc-300 leading-relaxed">
-                      Confirmo que el lugar donde se lavará el vehículo cuenta
-                      con una <strong>toma de agua</strong> (llave de manguera)
-                      y un <strong>enchufe de corriente eléctrica</strong>{" "}
-                      accesibles a menos de 20 metros.
+                      Confirmo que el lugar cuenta con{" "}
+                      <strong>toma de agua</strong> y{" "}
+                      <strong>corriente eléctrica</strong> accesibles a menos de
+                      20 metros.
                     </p>
                     <FormMessage className="text-red-400 text-xs font-bold" />
                   </div>

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -21,12 +22,12 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (error) throw error;
     } catch (error: any) {
-      toast.error("Error con Google", { description: error.message });
+      toast.error("Error de conexión", { description: error.message });
     }
   };
 
@@ -41,10 +42,15 @@ export default function LoginPage() {
       });
 
       if (error) throw error;
-      router.push("/admin");
+
+      if (email.toLowerCase() === "alexhdezf18@gmail.com") {
+        router.push("/admin");
+      } else {
+        router.push("/reservar");
+      }
     } catch (error: any) {
-      toast.error("Error de acceso", {
-        description: "Credenciales incorrectas",
+      toast.error("Acceso denegado", {
+        description: "Credenciales administrativas incorrectas.",
       });
     } finally {
       setLoading(false);
@@ -52,21 +58,37 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-black px-4">
-      <div className="w-full max-w-sm space-y-6 border border-zinc-800 bg-zinc-900/50 p-6 rounded-xl backdrop-blur-md">
-        <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold text-white">Iniciar Sesión</h1>
-          <p className="text-zinc-400 text-sm">Accede a tu cuenta o panel.</p>
+    <main className="min-h-screen flex items-center justify-center bg-black px-4 relative overflow-hidden">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+
+      <div className="w-full max-w-sm space-y-6 border border-zinc-800 bg-zinc-900/60 p-8 rounded-2xl backdrop-blur-xl shadow-2xl relative z-10">
+        <div className="flex flex-col items-center justify-center space-y-4 text-center mb-2">
+          <div className="relative h-20 w-20 overflow-hidden rounded-full border-2 border-orange-500/20 shadow-lg shadow-orange-500/20">
+            <Image
+              src="/logo.jpg"
+              alt="Logo Papotico's Wash"
+              fill
+              className="object-cover"
+              sizes="80px"
+              priority
+            />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold text-white tracking-tight">
+              Bienvenido
+            </h1>
+            <p className="text-zinc-400 text-sm">
+              Inicia sesión para agendar tu cita.
+            </p>
+          </div>
         </div>
 
-        {/* --- BOTÓN DE GOOGLE --- */}
         <Button
-          variant="outline"
-          className="w-full bg-white text-black hover:bg-zinc-200 border-none font-medium"
+          className="w-full bg-white text-black hover:bg-zinc-200 border-none font-bold py-6 text-md shadow-lg transition-transform hover:scale-[1.02]"
           onClick={handleGoogleLogin}
         >
           <svg
-            className="mr-2 h-4 w-4"
+            className="mr-3 h-5 w-5"
             aria-hidden="true"
             focusable="false"
             data-prefix="fab"
@@ -83,61 +105,69 @@ export default function LoginPage() {
           Continuar con Google
         </Button>
 
-        <div className="relative">
+        <div className="relative py-2">
           <div className="absolute inset-0 flex items-center">
             <span className="w-full border-t border-zinc-800"></span>
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-zinc-900 px-2 text-zinc-500">
-              O acceso administrativo
+          <div className="relative flex justify-center text-xs uppercase font-semibold tracking-wider">
+            <span className="bg-zinc-900 px-3 text-zinc-500">
+              O con tu correo
             </span>
           </div>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-zinc-200">
-              Correo Admin
+            <Label
+              htmlFor="email"
+              className="text-zinc-400 text-xs uppercase tracking-wider"
+            >
+              Correo Electrónico
             </Label>
             <Input
               id="email"
               type="email"
+              placeholder="cliente@ejemplo.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="bg-zinc-950 border-zinc-800 text-white"
+              className="bg-black/50 border-zinc-800 text-white focus-visible:ring-orange-500 h-11"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-zinc-200">
+            <Label
+              htmlFor="password"
+              className="text-zinc-400 text-xs uppercase tracking-wider"
+            >
               Contraseña
             </Label>
             <Input
               id="password"
               type="password"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-zinc-950 border-zinc-800 text-white"
+              className="bg-black/50 border-zinc-800 text-white focus-visible:ring-orange-500 h-11"
             />
           </div>
           <Button
             type="submit"
-            className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+            className="w-full bg-zinc-800 hover:bg-orange-600 text-zinc-300 hover:text-white transition-colors h-11"
             disabled={loading}
           >
             {loading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              "Entrar como Admin"
+              "Iniciar Sesión"
             )}
           </Button>
         </form>
 
-        <div className="text-center">
+        <div className="text-center pt-2">
           <Link
             href="/"
-            className="text-sm text-zinc-500 hover:text-white transition-colors"
+            className="text-sm text-zinc-500 hover:text-orange-500 transition-colors font-medium"
           >
-            ← Regresar al inicio
+            ← Volver a la página principal
           </Link>
         </div>
       </div>

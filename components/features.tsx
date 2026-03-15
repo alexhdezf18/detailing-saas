@@ -15,8 +15,7 @@ const featuresList: Feature[] = [
   },
   {
     title: "Productos Premium",
-    description:
-      "Utilizamos ceras y shampoos biodegradables de grado profesional (Chemical Guys, Meguiar's) para cuidar tu pintura.",
+    description: "Utilizamos productos profesionales para cuidar tu pintura.",
     icon: ShieldCheck,
   },
   {
