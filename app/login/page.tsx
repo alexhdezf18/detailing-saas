@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, UserCircle } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { toast } from "sonner";
@@ -50,7 +50,7 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       toast.error("Acceso denegado", {
-        description: "Credenciales administrativas incorrectas.",
+        description: "Revisa tu correo o contraseña.",
       });
     } finally {
       setLoading(false);
@@ -61,7 +61,7 @@ export default function LoginPage() {
     <main className="min-h-screen flex items-center justify-center bg-black px-4 relative overflow-hidden">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none"></div>
 
-      <div className="w-full max-w-sm space-y-6 border border-zinc-800 bg-zinc-900/60 p-8 rounded-2xl backdrop-blur-xl shadow-2xl relative z-10">
+      <div className="w-full max-w-sm space-y-6 border border-zinc-800 bg-zinc-900/60 p-8 rounded-2xl backdrop-blur-xl shadow-2xl relative z-10 my-8">
         <div className="flex flex-col items-center justify-center space-y-4 text-center mb-2">
           <div className="relative h-20 w-20 overflow-hidden rounded-full border-2 border-orange-500/20 shadow-lg shadow-orange-500/20">
             <Image
@@ -78,7 +78,7 @@ export default function LoginPage() {
               Bienvenido
             </h1>
             <p className="text-zinc-400 text-sm">
-              Inicia sesión para agendar tu cita.
+              Inicia sesión para agendar más rápido.
             </p>
           </div>
         </div>
@@ -103,6 +103,26 @@ export default function LoginPage() {
             ></path>
           </svg>
           Continuar con Google
+        </Button>
+
+        <div className="relative py-2">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-zinc-800"></span>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase font-semibold tracking-wider">
+            <span className="bg-zinc-900 px-3 text-zinc-500">
+              O si llevas prisa
+            </span>
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          onClick={() => router.push("/reservar")}
+          className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-6 text-md shadow-lg transition-transform hover:scale-[1.02]"
+        >
+          <UserCircle className="mr-2 h-5 w-5 text-orange-500" />
+          Continuar como invitado
         </Button>
 
         <div className="relative py-2">

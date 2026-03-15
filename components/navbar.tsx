@@ -65,6 +65,8 @@ export function Navbar() {
     }
   };
 
+  const linkDeReserva = user ? "/reservar" : "/login";
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-black/60 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
@@ -100,7 +102,7 @@ export function Navbar() {
           </Link>
           <Link
             className="text-sm font-medium text-zinc-400 transition-colors hover:text-orange-500"
-            href="/reservar"
+            href={linkDeReserva}
           >
             Reservar
           </Link>
@@ -197,7 +199,7 @@ export function Navbar() {
                   Iniciar Sesión
                 </Button>
               </Link>
-              <Link href="/reservar">
+              <Link href="/login">
                 <Button className="bg-orange-600 text-white hover:bg-orange-700 font-bold shadow-lg shadow-orange-500/20 px-3 sm:px-4 text-sm sm:text-base">
                   Agendar Cita
                 </Button>
@@ -205,7 +207,6 @@ export function Navbar() {
             </div>
           )}
 
-          {/* ==================== MENÚ HAMBURGUESA (MÓVIL) ==================== */}
           <div className="md:hidden flex items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -234,7 +235,7 @@ export function Navbar() {
                   asChild
                   className="hover:bg-zinc-800 cursor-pointer py-3"
                 >
-                  <Link href="/reservar">Reservar</Link>
+                  <Link href={linkDeReserva}>Reservar</Link>
                 </DropdownMenuItem>
 
                 {!user && (
