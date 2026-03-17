@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { ArrowLeft, Lock, Unlock, Sun } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner"; // Añadimos toast para notificar errores
 
 const TODAS_LAS_HORAS = [
   "05:00 AM",
@@ -55,14 +56,16 @@ export default function AdminCalendarPage() {
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("bookings")
         .select("booking_time, status")
         .in("status", ["blocked", "unlocked"])
         .gte("booking_date", startOfDay.toISOString())
         .lte("booking_date", endOfDay.toISOString());
 
-      if (data) {
+      if (error) {
+        console.error("Error cargando horarios:", error);
+      } else if (data) {
         setDbExceptions(
           data.map((d) => ({ time: d.booking_time, status: d.status })),
         );
@@ -84,64 +87,91 @@ export default function AdminCalendarPage() {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    if (esNativo) {
-      if (exceptionRecord?.status === "blocked") {
-        await supabase
-          .from("bookings")
-          .delete()
-          .eq("status", "blocked")
-          .eq("booking_time", time)
-          .gte("booking_date", startOfDay.toISOString())
-          .lte("booking_date", endOfDay.toISOString());
-        setDbExceptions((prev) => prev.filter((e) => e.time !== time));
+    try {
+      if (esNativo) {
+        // REGLA 1: Hora de trabajo normal
+        if (exceptionRecord?.status === "blocked") {
+          const { error } = await supabase
+            .from("bookings")
+            .delete()
+            .eq("status", "blocked")
+            .eq("booking_time", time)
+            .gte("booking_date", startOfDay.toISOString())
+            .lte("booking_date", endOfDay.toISOString());
+
+          if (error) throw error;
+          setDbExceptions((prev) => prev.filter((e) => e.time !== time));
+        } else {
+          // Bloqueo manual: Añadimos los campos obligatorios de la DB para evitar rechazos silenciosos
+          const { error } = await supabase.from("bookings").insert([
+            {
+              name: "EXCEPCIÓN - BLOQUEO",
+              phone: "0",
+              email: "admin@bloqueo.com",
+              service_type: "Admin",
+              booking_date: date.toISOString(),
+              booking_time: time,
+              status: "blocked",
+              address_street: "-",
+              address_number: "-",
+              address_zip: "-",
+              address_colonia: "-",
+              vehicle_make: "-",
+              vehicle_model: "-",
+              trunk_vacuum: false, // <--- CAMPOS CRÍTICOS AGREGADOS
+            },
+          ]);
+
+          if (error) throw error;
+          setDbExceptions((prev) => [...prev, { time, status: "blocked" }]);
+        }
       } else {
-        await supabase.from("bookings").insert([
-          {
-            name: "EXCEPCIÓN - BLOQUEO",
-            phone: "0",
-            email: "admin@bloqueo.com",
-            service_type: "Admin",
-            booking_date: date.toISOString(),
-            booking_time: time,
-            status: "blocked",
-            address_street: "-",
-            address_number: "-",
-            address_zip: "-",
-            address_colonia: "-",
-          },
-        ]);
-        setDbExceptions((prev) => [...prev, { time, status: "blocked" }]);
+        // REGLA 2: Hora de descanso (Escuela)
+        if (exceptionRecord?.status === "unlocked") {
+          const { error } = await supabase
+            .from("bookings")
+            .delete()
+            .eq("status", "unlocked")
+            .eq("booking_time", time)
+            .gte("booking_date", startOfDay.toISOString())
+            .lte("booking_date", endOfDay.toISOString());
+
+          if (error) throw error;
+          setDbExceptions((prev) => prev.filter((e) => e.time !== time));
+        } else {
+          // Apertura manual: Añadimos los campos obligatorios de la DB
+          const { error } = await supabase.from("bookings").insert([
+            {
+              name: "EXCEPCIÓN - APERTURA",
+              phone: "0",
+              email: "admin@apertura.com",
+              service_type: "Admin",
+              booking_date: date.toISOString(),
+              booking_time: time,
+              status: "unlocked",
+              address_street: "-",
+              address_number: "-",
+              address_zip: "-",
+              address_colonia: "-",
+              vehicle_make: "-",
+              vehicle_model: "-",
+              trunk_vacuum: false, // <--- CAMPOS CRÍTICOS AGREGADOS
+            },
+          ]);
+
+          if (error) throw error;
+          setDbExceptions((prev) => [...prev, { time, status: "unlocked" }]);
+        }
       }
-    } else {
-      if (exceptionRecord?.status === "unlocked") {
-        await supabase
-          .from("bookings")
-          .delete()
-          .eq("status", "unlocked")
-          .eq("booking_time", time)
-          .gte("booking_date", startOfDay.toISOString())
-          .lte("booking_date", endOfDay.toISOString());
-        setDbExceptions((prev) => prev.filter((e) => e.time !== time));
-      } else {
-        await supabase.from("bookings").insert([
-          {
-            name: "EXCEPCIÓN - APERTURA",
-            phone: "0",
-            email: "admin@apertura.com",
-            service_type: "Admin",
-            booking_date: date.toISOString(),
-            booking_time: time,
-            status: "unlocked",
-            address_street: "-",
-            address_number: "-",
-            address_zip: "-",
-            address_colonia: "-",
-          },
-        ]);
-        setDbExceptions((prev) => [...prev, { time, status: "unlocked" }]);
-      }
+    } catch (error: any) {
+      console.error("Error crítico al modificar horario:", error);
+      toast.error("Error en la Base de Datos", {
+        description: error.message || "No se pudo guardar el cambio.",
+      });
+    } finally {
+      // Este finally garantiza que la pantalla jamás se quede congelada, falle o gane.
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
