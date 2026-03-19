@@ -9,7 +9,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { ArrowLeft, Lock, Unlock, Sun } from "lucide-react";
 import Link from "next/link";
-import { toast } from "sonner"; // Añadimos toast para notificar errores
+import { toast } from "sonner";
 
 const TODAS_LAS_HORAS = [
   "05:00 AM",
@@ -89,7 +89,6 @@ export default function AdminCalendarPage() {
 
     try {
       if (esNativo) {
-        // REGLA 1: Hora de trabajo normal
         if (exceptionRecord?.status === "blocked") {
           const { error } = await supabase
             .from("bookings")
@@ -102,7 +101,7 @@ export default function AdminCalendarPage() {
           if (error) throw error;
           setDbExceptions((prev) => prev.filter((e) => e.time !== time));
         } else {
-          // Bloqueo manual: Añadimos los campos obligatorios de la DB para evitar rechazos silenciosos
+          // ✅ FIX: Se eliminó trunk_vacuum
           const { error } = await supabase.from("bookings").insert([
             {
               name: "EXCEPCIÓN - BLOQUEO",
@@ -118,7 +117,6 @@ export default function AdminCalendarPage() {
               address_colonia: "-",
               vehicle_make: "-",
               vehicle_model: "-",
-              trunk_vacuum: false, // <--- CAMPOS CRÍTICOS AGREGADOS
             },
           ]);
 
@@ -126,7 +124,6 @@ export default function AdminCalendarPage() {
           setDbExceptions((prev) => [...prev, { time, status: "blocked" }]);
         }
       } else {
-        // REGLA 2: Hora de descanso (Escuela)
         if (exceptionRecord?.status === "unlocked") {
           const { error } = await supabase
             .from("bookings")
@@ -139,7 +136,7 @@ export default function AdminCalendarPage() {
           if (error) throw error;
           setDbExceptions((prev) => prev.filter((e) => e.time !== time));
         } else {
-          // Apertura manual: Añadimos los campos obligatorios de la DB
+          // ✅ FIX: Se eliminó trunk_vacuum
           const { error } = await supabase.from("bookings").insert([
             {
               name: "EXCEPCIÓN - APERTURA",
@@ -155,7 +152,6 @@ export default function AdminCalendarPage() {
               address_colonia: "-",
               vehicle_make: "-",
               vehicle_model: "-",
-              trunk_vacuum: false, // <--- CAMPOS CRÍTICOS AGREGADOS
             },
           ]);
 
@@ -169,7 +165,6 @@ export default function AdminCalendarPage() {
         description: error.message || "No se pudo guardar el cambio.",
       });
     } finally {
-      // Este finally garantiza que la pantalla jamás se quede congelada, falle o gane.
       setLoading(false);
     }
   };
